@@ -8,9 +8,19 @@
         // See also https://aka.ms/tsconfig/module
         "module": "ESNext",
         "target": "ESNext",
-        "types": ["vite/client"],
+        "types": [
+            "vite/client"
+        ],
         "moduleResolution": "Bundler",
-        "lib": ["ESNext", "DOM"],
+        "lib": [
+            "ESNext",
+            "DOM"
+        ],
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        },
         // Other Outputs
         "sourceMap": true,
         "declaration": true,
