@@ -4,4 +4,6 @@
  */
 export default {
     "src/**/*.{js,json,md,ts}": "biome check --write",
+    "*.json": "biome format --write",
+    ".vscode/*": "biome format --write",
 };
