@@ -1,5 +1,7 @@
 import * as v from "valibot";
-import { MessageSchema } from "@/types/v0/Message";
+import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
+import { MessageSchema } from "@/types/v0/Character/Message";
+import { unique } from "@/types/v0/utils";
 
 /**
  * @see {@link Chat}
@@ -16,11 +18,11 @@ export const ChatSchema = v.object({
     /**
      * The list of messages in this chat.
      */
-    messages: v.array(MessageSchema),
+    messages: v.pipe(v.array(MessageSchema), unique("id")),
     /**
      * Optional title for the chat.
      */
-    title: v.optional(v.string()),
+    title: v.optional(v.string(), "Chat"),
     /**
      * creation timestamp(unix epoch)
      */
@@ -29,6 +31,12 @@ export const ChatSchema = v.object({
      * Last updated timestamp(unix epoch)
      */
     updatedAt: v.optional(v.number(), Date.now),
+
+    /**
+     * Chat specific lorebook data.
+     * @see {@link LorebookDataSchema}
+     */
+    lorebook: v.optional(LorebookDataSchema.entries.data),
 });
 
 /**

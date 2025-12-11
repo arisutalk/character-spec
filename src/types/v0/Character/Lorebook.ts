@@ -1,51 +1,5 @@
+import { unique } from "@/types/v0/utils";
 import * as v from "valibot";
-
-/**
- * @see {@link LorebookEntry}
- */
-export const LorebookEntrySchema = v.object({
-    /**
-     * Internally generated ID.
-     */
-    id: v.optional(v.string()),
-    /**
-     * Human readable name for the lorebook.
-     */
-    name: v.string(),
-    /**
-     * The condition for the lorebook to be activated.
-     * If empty, it will not be activated.
-     * Duplicated condition is no effect.
-     * Use 'always' to activate without any condition. {@link LorebookConditionTypeMap#always}
-     */
-    condition: v.optional(v.array(v.custom<LorebookCondition>(() => true))),
-    /**
-     * The strategy for resolving multiple conditions.
-     * "all" means all conditions must be met.
-     * "any" means at least one condition must be met.
-     */
-    multipleConditionResolveStrategy: v.optional(v.picklist(["all", "any"])),
-    /**
-     * The lorebook content to be added on AI prompt.
-     * Not for human reading, and it's scriptable.
-     */
-    content: v.string(),
-    /**
-     * The priority of the lorebook.
-     * Higher priority means it will be activated first, remains when token limit is exceeded.
-     * May be negative. Base is 0. Allows demical.
-     */
-    priority: v.optional(v.number()),
-    /**
-     * Whether the lorebook is enabled.
-     */
-    enabled: v.optional(v.boolean()),
-});
-/**
- * A lorebook is a collection of lorebooks.
- * Lorebook is a small part of prompts which is activated by session's text matching.
- */
-export type LorebookEntry = v.InferOutput<typeof LorebookEntrySchema>;
 
 /**
  * @see {@link LorebookConditionSchema}
@@ -106,6 +60,53 @@ export const LorebookConditionSchema = v.variant("type", [
 export type LorebookCondition = v.InferOutput<typeof LorebookConditionSchema>;
 
 /**
+ * @see {@link LorebookEntry}
+ */
+export const LorebookEntrySchema = v.object({
+    /**
+     * Internally generated ID.
+     */
+    id: v.string(),
+    /**
+     * Human readable name for the lorebook.
+     */
+    name: v.string(),
+    /**
+     * The condition for the lorebook to be activated.
+     * If empty, it will not be activated.
+     * Duplicated condition is no effect.
+     * Use 'always' to activate without any condition. {@link LorebookConditionTypeMap#always}
+     */
+    condition: v.optional(v.array(LorebookConditionSchema), []),
+    /**
+     * The strategy for resolving multiple conditions.
+     * "all" means all conditions must be met.
+     * "any" means at least one condition must be met.
+     */
+    multipleConditionResolveStrategy: v.optional(v.picklist(["all", "any"])),
+    /**
+     * The lorebook content to be added on AI prompt.
+     * Not for human reading, and it's scriptable.
+     */
+    content: v.string(),
+    /**
+     * The priority of the lorebook.
+     * Higher priority means it will be activated first, remains when token limit is exceeded.
+     * May be negative. Base is 0. Allows demical.
+     */
+    priority: v.optional(v.number()),
+    /**
+     * Whether the lorebook is enabled.
+     */
+    enabled: v.optional(v.boolean()),
+});
+/**
+ * A lorebook is a collection of lorebooks.
+ * Lorebook is a small part of prompts which is activated by session's text matching.
+ */
+export type LorebookEntry = v.InferOutput<typeof LorebookEntrySchema>;
+
+/**
  * @see {@link LorebookData}
  */
 export const LorebookDataSchema = v.object({
@@ -125,18 +126,7 @@ export const LorebookDataSchema = v.object({
      * Contains the actual lorebooks.
      * Duplicated id is not allowed.
      */
-    data: v.optional(
-        v.pipe(
-            v.array(LorebookEntrySchema),
-            v.check(
-                (data) =>
-                    data.map((i) => i.id).length ===
-                    new Set(data.map((i) => i.id)).size,
-                "Duplicated id is not allowed.",
-            ),
-        ),
-        [],
-    ),
+    data: v.optional(v.pipe(v.array(LorebookEntrySchema), unique("id")), []),
 });
 /**
  * Object containing all data for the lorebook.

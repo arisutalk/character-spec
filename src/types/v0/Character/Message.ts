@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { ImageURLSchema } from "@/types/v0/utils";
 
 /**
  * Represents the role of the message sender.
@@ -26,26 +27,9 @@ const MessageContentSchema = {
          */
         type: v.literal("file"),
         /**
-         * URL of the file. May be absolute or relative, or even uuid.
-         * Client should handle the actual file loading.
-         * Don't use base64 encoded file. Instead, use with type:"inline_file".
+         * URL of the file.
          */
-        data: v.string(),
-        /**
-         * MIME type of the file.
-         */
-        mimeType: v.string(),
-    }),
-    inline_file: v.object({
-        /**
-         * inline_file: The file content is embedded in the message.
-         */
-        type: v.literal("inline_file"),
-        /**
-         * File content. May be base64 encoded or file, or blob.
-         * It's good to use url with type:"file" instead, to avoid getting too large message.
-         */
-        data: v.union([v.file(), v.pipe(v.string(), v.base64()), v.blob()]),
+        data: ImageURLSchema,
         /**
          * MIME type of the file.
          */
@@ -65,7 +49,6 @@ export const MessageSchema = v.object({
     content: v.variant("type", [
         MessageContentSchema.text,
         MessageContentSchema.file,
-        MessageContentSchema.inline_file,
     ]),
     /** The timestamp when the message was created. */
     timestamp: v.optional(v.number()),

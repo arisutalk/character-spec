@@ -1,5 +1,7 @@
 import * as v from "valibot";
-import { LorebookDataSchema } from "@/types/v0/Lorebook";
+import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
+import { ScriptSettingSchema as ExecutableSettingSchema } from "@/types/v0/Executables/Executable";
+import { ImageURLSchema } from "@/types/v0/utils";
 
 /**
  * The prompt data for a character.
@@ -55,9 +57,19 @@ export const CharacterSchema = v.object({
     description: v.string(),
     /**
      * Optional URL for the character's avatar image.
+     * @see {@link ImageURL}
      */
-    avatarUrl: v.optional(v.pipe(v.string(), v.url())),
+    avatarUrl: v.optional(ImageURLSchema),
+    /**
+     * The prompt data for the character.
+     * @see {@link CharacterPromptData}
+     */
     prompt: CharacterPromptDataSchema,
+
+    /**
+     * Script and hooks which can be used to control the character's behavior.
+     */
+    executables: v.array(ExecutableSettingSchema),
 });
 
 /**

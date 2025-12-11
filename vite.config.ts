@@ -1,12 +1,47 @@
+import { readdirSync, statSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
 import tsconfigPaths from "vite-tsconfig-paths";
+
+function getEntries(
+    dir: string,
+    baseDir: string = dir,
+): Record<string, string> {
+    const entries: Record<string, string> = {};
+    const files = readdirSync(dir);
+
+    for (const file of files) {
+        const fullPath = resolve(dir, file);
+        const stat = statSync(fullPath);
+
+        if (stat.isDirectory()) {
+            Object.assign(entries, getEntries(fullPath, baseDir));
+        } else if (
+            stat.isFile() &&
+            file.endsWith(".ts") &&
+            !file.endsWith(".d.ts")
+        ) {
+            const relativePath = relative(baseDir, fullPath);
+            const name = relativePath
+                .replace(/\.ts$/, "")
+                .replace(/\\/g, "/")
+                .replace(/\/index$/, ""); // Normalize paths and strip /index for cleaner imports
+
+            entries[name] = fullPath;
+        }
+    }
+
+    return entries;
+}
+
+const typeEntries = getEntries(resolve(__dirname, "src/types"));
 
 export default defineConfig({
     plugins: [
         tsconfigPaths({}),
         dts({
-            rollupTypes: true,
+            rollupTypes: false,
             insertTypesEntry: true,
         }),
     ],
@@ -14,7 +49,7 @@ export default defineConfig({
         lib: {
             entry: {
                 index: "src/index.ts",
-                v0: "src/types/v0/index.ts",
+                ...typeEntries,
             },
             fileName: (_, entryName) => `${entryName}.js`,
 
