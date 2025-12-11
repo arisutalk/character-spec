@@ -1,0 +1,26 @@
+{
+    "name": "template-typescript-vite",
+    "private": true,
+    "license": "Apache-2.0",
+    "engines": {
+        "node": ">=22"
+    },
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "postinstall": "pnpm exec simple-git-hooks",
+        "format": "biome format --write .",
+        "lint": "biome check ."
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "typescript": "^5.9.3",
+        "cross-env": "^10.1.0",
+        "lint-staged": "^16.2.6",
+        "@biomejs/biome": "^2.3.5",
+        "simple-git-hooks": "^2.13.1",
+        "vite": "^6.4.1",
+        "wrangler": "^4.47.0"
+    },
+    "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706"
+}
