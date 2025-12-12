@@ -11,12 +11,9 @@ export const ChatSchema = z
         id: z
             .string()
             .meta({ description: "Unique identifier for the chat session." }),
-        characterId: z
-            .string()
-            .meta({
-                description:
-                    "The ID of the character associated with this chat.",
-            }),
+        characterId: z.string().meta({
+            description: "The ID of the character associated with this chat.",
+        }),
         messages: z
             .array(MessageSchema)
             .refine(unique("id"), { message: "Not unique key: id" })

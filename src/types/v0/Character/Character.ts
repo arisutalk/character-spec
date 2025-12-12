@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AssetsSettingSchema } from "@/types/v0/Character/Assets";
 import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
 import { MetaSchema } from "@/types/v0/Character/Meta";
 import { ScriptSettingSchema as ExecutableSettingSchema } from "@/types/v0/Executables/Executable";
@@ -57,6 +58,9 @@ export const CharacterSchema = z
         metadata: MetaSchema.meta({
             description:
                 "Additional metadata about the character. Not used by the system, but can be used by the user.",
+        }),
+        assets: AssetsSettingSchema.meta({
+            description: "Assets for the character.",
         }),
     })
     .meta({ description: "Represents a specific AI character personality." });

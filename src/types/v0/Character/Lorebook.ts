@@ -7,37 +7,25 @@ import { unique } from "@/types/v0/utils";
 export const LorebookConditionDetailSchema = {
     regex: z
         .object({
-            type: z
-                .literal("regex_match")
-                .meta({
-                    description: "This condition matches the regex pattern.",
-                }),
-            regexPattern: z
-                .string()
-                .meta({
-                    description: "The regex pattern to match. Scriptable.",
-                }),
-            regexFlags: z
-                .string()
-                .optional()
-                .meta({
-                    description: "The regex flags to use. Not scriptable.",
-                }),
+            type: z.literal("regex_match").meta({
+                description: "This condition matches the regex pattern.",
+            }),
+            regexPattern: z.string().meta({
+                description: "The regex pattern to match. Scriptable.",
+            }),
+            regexFlags: z.string().optional().meta({
+                description: "The regex flags to use. Not scriptable.",
+            }),
         })
         .meta({ description: "Regex match condition." }),
     plainText: z
         .object({
-            type: z
-                .literal("plain_text_match")
-                .meta({
-                    description: "This condition simply matches the text.",
-                }),
-            text: z
-                .string()
-                .meta({
-                    description:
-                        "The text to match. Scriptable. Case insensitive.",
-                }),
+            type: z.literal("plain_text_match").meta({
+                description: "This condition simply matches the text.",
+            }),
+            text: z.string().meta({
+                description: "The text to match. Scriptable. Case insensitive.",
+            }),
         })
         .meta({ description: "Plain text match condition." }),
     always: z
@@ -84,12 +72,10 @@ export const LorebookEntrySchema = z
                 description:
                     "The strategy for resolving multiple conditions. 'all' means all must be met, 'any' means at least one.",
             }),
-        content: z
-            .string()
-            .meta({
-                description:
-                    "The lorebook content to be added on AI prompt. Not for human reading. Scriptable.",
-            }),
+        content: z.string().meta({
+            description:
+                "The lorebook content to be added on AI prompt. Not for human reading. Scriptable.",
+        }),
         priority: z.number().optional().meta({
             description:
                 "The priority of the lorebook. Higher priority means it will be activated first. May be negative or decimal. Base is 0.",

@@ -11,22 +11,18 @@ export const RoleSchema = z
 const MessageContentSchema = {
     text: z
         .object({
-            type: z
-                .literal("string")
-                .meta({
-                    description: "The message content is a simple string.",
-                }),
+            type: z.literal("string").meta({
+                description: "The message content is a simple string.",
+            }),
             data: z.string().meta({ description: "The message content." }),
         })
         .meta({ description: "Text message content." }),
     file: z
         .object({
-            type: z
-                .literal("file")
-                .meta({
-                    description:
-                        "The file content is stored in the separated storage.",
-                }),
+            type: z.literal("file").meta({
+                description:
+                    "The file content is stored in the separated storage.",
+            }),
             data: ImageURLSchema.meta({ description: "URL of the file." }),
             mimeType: z
                 .string()
@@ -52,12 +48,9 @@ export const MessageSchema = z
                 MessageContentSchema.file,
             ])
             .meta({ description: "The content of the message." }),
-        timestamp: z
-            .number()
-            .optional()
-            .meta({
-                description: "The timestamp when the message was created.",
-            }),
+        timestamp: z.number().optional().meta({
+            description: "The timestamp when the message was created.",
+        }),
     })
     .meta({ description: "Represents a single message in a chat history." });
 

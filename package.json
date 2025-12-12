@@ -1,7 +1,7 @@
 {
     "name": "@arisutalk/character-spec",
     "description": "Character specification, schema & migration for ArisuTalk",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "contributors": [
         {
             "name": "concertypin",

@@ -14,13 +14,9 @@ const ReplaceHookMetaType = [
             type: z
                 .literal("string")
                 .meta({ description: "The input pattern is a simple string." }),
-            caseSensitive: z
-                .boolean()
-                .default(true)
-                .meta({
-                    description:
-                        "If true, the input pattern is case sensitive.",
-                }),
+            caseSensitive: z.boolean().default(true).meta({
+                description: "If true, the input pattern is case sensitive.",
+            }),
         })
         .meta({ description: "String pattern type." }),
 ] as const;
