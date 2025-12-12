@@ -45,6 +45,7 @@
         "noUncheckedSideEffectImports": true,
         "skipLibCheck": true,
         "allowJs": true,
-        "checkJs": true
+        "checkJs": true,
+        "strictNullChecks": true
     }
 }

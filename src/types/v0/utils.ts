@@ -1,4 +1,4 @@
-import * as v from "valibot";
+import { z } from "zod";
 
 /**
  * This type is used to represent the URL of an image.
@@ -8,36 +8,35 @@ import * as v from "valibot";
  * If its protocol is `local:`, it means the image is stored in the browser, usually OpFS.
  * Otherwise, it should be a valid URL which can be fetched in browser.
  */
-export const ImageURLSchema = v.pipe(v.string(), v.url());
+export const ImageURLSchema = z.url().meta({
+    description:
+        "URL of an image. `data:` for base64 (export only), `local:` for browser storage (OpFS), otherwise a fetchable URL.",
+});
 
 /**
- * Valibot custom validator to ensure all objects in the array have unique values for a specific key.
- * Shortcut for `v.check(i=>new Set(i.map(j=>j[key])).size===i.length)`.
+ * Custom validator to ensure all objects in the array have unique values for a specific key.
  * @param key The key to check for uniqueness. It should be a string key of the object.
- * @param errorMsg The error message to display if the validation fails.
- * @returns A valibot validator to be put on `v.pipe`.
+ * @returns A predicate function for `z.refine`.
  * @example
  * ```ts
- * const schema = v.array(v.object({ name: v.string() }), unique("name"));
+ * const schema = z.array(z.object({ name: z.string() })).refine(unique("name"), { message: "Not unique" });
  * ```
  */
 export function unique<
     const ARR extends {
         [key: string]: unknown;
     },
->(key: keyof ARR, errorMsg?: string) {
-    return v.check(
-        (i: ARR[]) => {
-            return new Set(i.map((j) => j[key])).size === i.length;
-        },
-        errorMsg ?? `Not unique key: ${String(key)}`,
-    );
+>(key: keyof ARR) {
+    return (i: ARR[]) => {
+        return new Set(i.map((j) => j[key])).size === i.length;
+    };
 }
 
 /**
- * Valibot custom schema to ensure the value is a positive integer.
+ * Zod custom schema to ensure the value is a positive integer.
  */
-export const positiveInteger = v.pipe(
-    v.pipe(v.number(), v.integer()),
-    v.minValue(1),
-);
+export const positiveInteger = z
+    .number()
+    .int()
+    .min(1)
+    .meta({ description: "Positive integer (>= 1)" });

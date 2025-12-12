@@ -1,26 +1,28 @@
-import * as v from "valibot";
+import { z } from "zod";
 import { ReplaceHookSchema } from "@/types/v0/Executables/ReplaceHook";
 import { positiveInteger } from "@/types/v0/utils";
 
 /**
  * This is the script for character. It includes hook, script settings, something else.
  */
-export const ScriptSettingSchema = v.object({
-    /**
-     * Runtime settings for the script.
-     * This is used to control the runtime environment of the script.
-     * All values are capped at user's configuration, to prevent malicious script.
-     */
-    runtimeSetting: v.object({
-        /**
-         * The maximum memory usage of the script, in MB.
-         * Note that this is not a exact limit. It may be exceeded by a small amount, or ignored.
-         */
-        mem: v.optional(positiveInteger),
-    }),
-    /**
-     * Replace hooks for the script.
-     * @see {@link ReplaceHookSchema}
-     */
-    replaceHooks: ReplaceHookSchema,
-});
+export const ScriptSettingSchema = z
+    .object({
+        runtimeSetting: z
+            .object({
+                mem: positiveInteger.optional().meta({
+                    description:
+                        "The maximum memory usage of the script, in MB. Not an exact limit. May be exceeded or ignored.",
+                }),
+            })
+            .meta({
+                description:
+                    "Runtime settings for the script. Controls runtime environment. All values capped at user's configuration.",
+            }),
+        replaceHooks: ReplaceHookSchema.meta({
+            description: "Replace hooks for the script.",
+        }),
+    })
+    .meta({
+        description:
+            "Script settings for character. Includes hooks and script settings.",
+    });
