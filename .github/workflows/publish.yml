@@ -30,11 +30,16 @@ jobs:
           cache-dependency-path: "pnpm-lock.yaml"
           registry-url: 'https://registry.npmjs.org' 
 
+      # Ensure npm 11.5.1 or later for OIDC trusted publishing
+      - name: Update npm
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build package
         run: pnpm run build
 
+      # ⚠️ IMPORTANT: Trusted publishing requires npm publish (not pnpm)
       - name: Publish to NPM (OIDC)
-        run: pnpm publish --no-git-checks
+        run: npm publish --no-git-checks
