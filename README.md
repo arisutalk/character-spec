@@ -1,5 +1,7 @@
 # @arisutalk/character-spec ✨
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/arisutalk/character-spec)
+
 Hi there! Welcome to the **character-spec** library for ArisuTalk! 🌸
 
 This package defines the official character specification and schemas for ArisuTalk, strictly typed with [Zod](https://zod.dev/). It provides runtime validation and TypeScript types with **full JSDoc comments** for an amazing IDE experience!
