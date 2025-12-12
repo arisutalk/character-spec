@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
+import { MetaSchema } from "@/types/v0/Character/Meta";
 import { ScriptSettingSchema as ExecutableSettingSchema } from "@/types/v0/Executables/Executable";
 import { ImageURLSchema } from "@/types/v0/utils";
 
@@ -10,9 +11,6 @@ import { ImageURLSchema } from "@/types/v0/utils";
  */
 export type CharacterPromptData = z.infer<typeof CharacterPromptDataSchema>;
 
-/**
- * @see {@link CharacterPromptData}
- */
 export const CharacterPromptDataSchema = z
     .object({
         description: z
@@ -29,9 +27,6 @@ export const CharacterPromptDataSchema = z
             "The prompt data for a character. Used to generate the character's persona. All parameters are for AI prompt and scriptable.",
     });
 
-/**
- * @see {@link Character}
- */
 export const CharacterSchema = z
     .object({
         specVersion: z.literal(0).meta({
@@ -55,9 +50,13 @@ export const CharacterSchema = z
         prompt: CharacterPromptDataSchema.meta({
             description: "The prompt data for the character.",
         }),
-        executables: z.array(ExecutableSettingSchema).meta({
+        executables: ExecutableSettingSchema.meta({
             description:
                 "Script and hooks which can be used to control the character's behavior.",
+        }),
+        metadata: MetaSchema.meta({
+            description:
+                "Additional metadata about the character. Not used by the system, but can be used by the user.",
         }),
     })
     .meta({ description: "Represents a specific AI character personality." });

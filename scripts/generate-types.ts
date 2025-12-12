@@ -40,7 +40,6 @@ import {
     ReplaceHookMetaSchema,
     ReplaceHookSchema,
 } from "../src/types/v0/Executables/ReplaceHook";
-import { PromptSettingsSchema } from "../src/types/v0/Prompt/Prompt";
 import { ImageURLSchema, positiveInteger } from "../src/types/v0/utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -136,13 +135,6 @@ const fileSchemas: Record<string, SchemaEntry[]> = {
             name: "PositiveInteger",
             schema: positiveInteger,
             schemaName: "positiveInteger",
-        },
-    ],
-    "v0/Prompt/Prompt.d.ts": [
-        {
-            name: "PromptSettings",
-            schema: PromptSettingsSchema,
-            schemaName: "PromptSettingsSchema",
         },
     ],
 };
