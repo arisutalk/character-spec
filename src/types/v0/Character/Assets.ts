@@ -21,13 +21,6 @@ export const AssetsSettingSchema = z
             .array(AssetEntitySchema)
             .refine(unique("name"), { message: "Not unique key: name" })
             .meta({ description: "The assets of the character." }),
-        inlays: z
-            .array(AssetEntitySchema)
-            .refine(unique("name"), { message: "Not unique key: name" })
-            .meta({
-                description:
-                    "The inlays of the character. It is not intended to be exported as public.",
-            }),
     })
     .meta({ description: "Settings for character assets." });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ImageURLSchema } from "@/types/v0/utils";
+import { AssetEntitySchema } from "@/types/v0/Character/Assets";
+import { ImageURLSchema, unique } from "@/types/v0/utils";
 
 /**
  * Represents the role of the message sender.
@@ -54,6 +55,13 @@ export const MessageSchema = z
         timestamp: z.number().optional().meta({
             description: "The timestamp when the message was created.",
         }),
+        inlays: z
+            .array(AssetEntitySchema)
+            .refine(unique("name"), { message: "Not unique key: name" })
+            .meta({
+                description:
+                    "The inlays of the message. It is not intended to be exported as public.",
+            }),
     })
     .meta({ description: "Represents a single message in a chat history." });
 
