@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
-import { MessageSchema } from "@/types/v0/Character/Message";
-import { unique } from "@/types/v0/utils";
 
 /**
  * @see {@link Chat}
@@ -14,10 +12,6 @@ export const ChatSchema = z
         characterId: z.string().meta({
             description: "The ID of the character associated with this chat.",
         }),
-        messages: z
-            .array(MessageSchema)
-            .refine(unique("id"), { message: "Not unique key: id" })
-            .meta({ description: "The list of messages in this chat." }),
         title: z
             .string()
             .default("Chat")

@@ -39,6 +39,9 @@ export const MessageSchema = z
         id: z
             .string()
             .meta({ description: "Unique identifier for the message." }),
+        chatId: z.string().meta({
+            description: "The ID of the chat associated with this message.",
+        }),
         role: RoleSchema.meta({
             description: "The role of the message sender.",
         }),

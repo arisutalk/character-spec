@@ -1,6 +1,7 @@
 ## Transport
 
 We defined internal data structures for characters, and we need to make it into a file in order to export and share it.
+
 This is the psuedocode for exporting a character:
 ```typescript
 
@@ -13,3 +14,4 @@ async function exportCharacter(character: Character): string {
     return compressed;
 }
 ```
+Keep in mind that Chat and Message are not included in the character data, in order to keep the character data size small and message history can be queried from the database.
