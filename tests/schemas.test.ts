@@ -46,12 +46,12 @@ describe("Schema basics", () => {
         expect(Array.isArray(parsed.request)).toBe(true);
     });
 
-    it("ScriptSettingSchema applies default timeout (timout) in runtimeSetting", () => {
+    it("ScriptSettingSchema applies default timeout (timeout) in runtimeSetting", () => {
         const parsed = ScriptSettingSchema.parse({});
         expect(parsed.runtimeSetting).toBeDefined();
-        // default field is named `timout` in the schema
+        // default field is named `timeout` in the schema
         // ensure default value is applied
-        expect(parsed.runtimeSetting.timout).toBe(3);
+        expect(parsed.runtimeSetting.timeout).toBe(3);
     });
 
     it("AssetsSettingSchema enforces unique names and accepts valid assets", () => {

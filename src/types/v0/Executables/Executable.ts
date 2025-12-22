@@ -13,7 +13,7 @@ export const ScriptSettingSchema = z
                     description:
                         "The maximum memory usage of the script, in MB. Not an exact limit. May be exceeded or ignored.",
                 }),
-                timout: positiveInteger.default(3).meta({
+                timeout: positiveInteger.default(3).meta({
                     description:
                         "The maximum execution time of the script, in seconds. Not an exact limit. May be exceeded or ignored. " +
                         "It is used per call, not a total limit. Default is 3 seconds.",
