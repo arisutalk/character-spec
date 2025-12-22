@@ -36,12 +36,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        
+      - name: Build package
+        run: pnpm run build
 
       - name: Run type tests
         run: pnpm test:types
-
-      - name: Build package
-        run: pnpm run build
 
       - name: Publish to NPM (OIDC)
         run: npm publish --no-git-checks
