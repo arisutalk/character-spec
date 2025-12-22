@@ -3,7 +3,6 @@ import { AssetsSettingSchema } from "@/types/v0/Character/Assets";
 import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
 import { MetaSchema } from "@/types/v0/Character/Meta";
 import { ScriptSettingSchema as ExecutableSettingSchema } from "@/types/v0/Executables/Executable";
-import { ImageURLSchema } from "@/types/v0/utils";
 
 /**
  * The prompt data for a character.
@@ -17,11 +16,13 @@ export const CharacterPromptDataSchema = z
         description: z
             .string()
             .meta({ description: "The character description." }),
-        authorsNote: z.string().meta({
+        authorsNote: z.string().optional().meta({
             description:
                 "The authors note. It's usually used to mock the user's message (differ by prompt).",
         }),
-        lorebook: LorebookDataSchema.meta({ description: "Lorebook data." }),
+        lorebook: LorebookDataSchema.meta({
+            description: "Global lorebook data",
+        }),
     })
     .meta({
         description:
@@ -45,8 +46,9 @@ export const CharacterSchema = z
             description:
                 "A short description of the character. Human readable, not scriptable.",
         }),
-        avatarUrl: ImageURLSchema.optional().meta({
-            description: "Optional URL for the character's avatar image.",
+        avatarUrl: z.string().optional().meta({
+            description:
+                "Optional name of asset for the character's avatar image.",
         }),
         prompt: CharacterPromptDataSchema.meta({
             description: "The prompt data for the character.",

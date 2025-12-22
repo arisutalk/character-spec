@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AssetEntitySchema } from "@/types/v0/Character/Assets";
-import { ImageURLSchema, unique } from "@/types/v0/utils";
+import { FileSchema, unique } from "@/types/v0/utils";
 
 /**
  * Represents the role of the message sender.
@@ -12,7 +12,7 @@ export const RoleSchema = z
 const MessageContentSchema = {
     text: z
         .object({
-            type: z.literal("string").meta({
+            type: z.literal("text").meta({
                 description: "The message content is a simple string.",
             }),
             data: z.string().meta({ description: "The message content." }),
@@ -24,7 +24,7 @@ const MessageContentSchema = {
                 description:
                     "The file content is stored in the separated storage.",
             }),
-            data: ImageURLSchema.meta({ description: "URL of the file." }),
+            data: FileSchema.meta({ description: "The file content." }),
             mimeType: z
                 .string()
                 .meta({ description: "MIME type of the file." }),
@@ -61,7 +61,8 @@ export const MessageSchema = z
             .meta({
                 description:
                     "The inlays of the message. It is not intended to be exported as public.",
-            }),
+            })
+            .default([]),
     })
     .meta({ description: "Represents a single message in a chat history." });
 

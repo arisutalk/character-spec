@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { unique } from "@/types/v0/utils";
+import { positiveInteger, unique } from "@/types/v0/utils";
 
 /**
+ * Lorebook condition detail schemas organized by type.
  * @see {@link LorebookConditionSchema}
  */
-export const LorebookConditionDetailSchema = {
+export const LorebookConditionDetails = {
     regex: z
         .object({
             type: z.literal("regex_match").meta({
@@ -41,9 +42,9 @@ export const LorebookConditionDetailSchema = {
  * The condition for the lorebook to be activated.
  */
 export const LorebookConditionSchema = z.discriminatedUnion("type", [
-    LorebookConditionDetailSchema.regex,
-    LorebookConditionDetailSchema.plainText,
-    LorebookConditionDetailSchema.always,
+    LorebookConditionDetails.regex,
+    LorebookConditionDetails.plainText,
+    LorebookConditionDetails.always,
 ]);
 
 /**
@@ -61,10 +62,15 @@ export const LorebookEntrySchema = z
         name: z
             .string()
             .meta({ description: "Human readable name for the lorebook." }),
-        condition: z.array(LorebookConditionSchema).default([]).meta({
-            description:
-                "The condition for the lorebook to be activated. If empty, it will not be activated. Use 'always' to activate without any condition.",
-        }),
+        condition: z
+            .array(LorebookConditionSchema)
+            .default([])
+            .meta({
+                description:
+                    "The condition for the lorebook to be activated. " +
+                    "If empty, it will not be activated. " +
+                    "Use 'always' to activate without any condition.",
+            }),
         multipleConditionResolveStrategy: z
             .enum(["all", "any"])
             .optional()
@@ -103,11 +109,12 @@ export const LorebookDataSchema = z
     .object({
         config: z
             .object({
-                tokenLimit: z.number().int().min(1).meta({
+                tokenLimit: positiveInteger.optional().meta({
                     description:
                         "The token limit for the lorebook. When exceeded, low-priority lorebooks will be deactivated. Positive integer.",
                 }),
             })
+            .prefault({})
             .meta({
                 description:
                     "The configuration for the lorebook. Not scriptable.",
@@ -123,8 +130,9 @@ export const LorebookDataSchema = z
     })
     .meta({
         description:
-            "Object containing all data for the lorebook. Meant to be stored in the database.",
-    });
+            "Object containing data for the lorebook. Meant to be stored in the database.",
+    })
+    .prefault({});
 
 /**
  * Object containing all data for the lorebook.

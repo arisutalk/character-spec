@@ -1,16 +1,24 @@
 import { z } from "zod";
-import { ImageURLSchema, unique } from "@/types/v0/utils";
+import { FileSchema, unique } from "@/types/v0/utils";
 
-export const AssetEntitySchema = z.object({
-    url: ImageURLSchema.meta({ description: "The URL of the asset." }),
-    mimeType: z.string().meta({
-        description: "MIME type of the asset. Usually `image/*` or `video/*`.",
-    }),
-    name: z.string().meta({
+export const AssetEntitySchema = z
+    .object({
+        mimeType: z.string().meta({
+            description:
+                "MIME type of the asset. Usually `image/*` or `video/*`.",
+        }),
+        name: z.string().meta({
+            description:
+                "The name of the asset. Used as the file name. Should be unique.",
+        }),
+        data: FileSchema.meta({
+            description: "The data of the asset.",
+        }),
+    })
+    .meta({
         description:
-            "The name of the asset. Used as the file name. Should be unique.",
-    }),
-});
+            "An asset entity. Represents single asset, via either URL or binary data.",
+    });
 
 /**
  * @see {@link AssetsSetting}

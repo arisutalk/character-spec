@@ -24,8 +24,8 @@ export const ChatSchema = z
             .number()
             .default(Date.now)
             .meta({ description: "Last updated timestamp (unix epoch)" }),
-        lorebook: LorebookDataSchema.shape.data
-            .optional()
+        lorebook: LorebookDataSchema.unwrap()
+            .shape.data.optional()
             .meta({ description: "Chat specific lorebook data." }),
     })
     .meta({ description: "Represents a chat session with a character." });
