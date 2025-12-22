@@ -1,0 +1,13 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "node_modules/.cache/tsconfig.typetest.tsbuildinfo",
+        "composite": true
+    },
+    "include": [
+        "scripts/type-test.ts",
+        "scripts/type-test-utils.ts",
+        "src/**/*",
+        "dist/**/*"
+    ]
+}

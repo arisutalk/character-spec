@@ -1,0 +1,8 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "node_modules/.cache/tsconfig.main.tsbuildinfo",
+        "composite": true
+    },
+    "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

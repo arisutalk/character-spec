@@ -1,7 +1,7 @@
 {
     "name": "@arisutalk/character-spec",
     "description": "Character specification, schema & migration for ArisuTalk",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "contributors": [
         {
             "name": "concertypin",
@@ -24,10 +24,12 @@
     "type": "module",
     "scripts": {
         "build": "vite build && pnpm generate-types",
-        "generate-types": "tsx scripts/generate-types.ts",
+        "generate-types": "tsx --tsconfig ./tsconfig.base.json scripts/generate-types.ts",
         "prepare": "pnpm exec simple-git-hooks",
         "format": "biome format --write .",
-        "lint": "biome check ."
+        "lint": "biome check .",
+        "test": "pnpm test:types && vitest run",
+        "test:types": "tsc -p tsconfig.typetest.json --noEmit"
     },
     "peerDependencies": {
         "zod": "^4.1.13"
@@ -36,10 +38,12 @@
         "@biomejs/biome": "^2.3.5",
         "lint-staged": "^16.2.6",
         "simple-git-hooks": "^2.13.1",
+        "tinyglobby": "^0.2.15",
         "tsx": "^4.19.2",
         "typescript": "~5.9.3",
         "vite": "^6.4.1",
         "vite-tsconfig-paths": "^5.1.4",
+        "vitest": "^4.0.16",
         "zod": "^4.1.13",
         "zod-to-ts": "^2.0.0"
     },

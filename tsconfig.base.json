@@ -1,0 +1,29 @@
+{
+    "compilerOptions": {
+        "incremental": true,
+        "tsBuildInfoFile": "node_modules/.cache/tsconfig.tsbuildinfo",
+        "module": "ESNext",
+        "target": "ESNext",
+        "types": ["vite/client"],
+        "moduleResolution": "Bundler",
+        "lib": ["ESNext", "DOM"],
+        "paths": {
+            "@/*": ["./src/*"]
+        },
+        "outDir": "./dist",
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "strict": true,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "noUncheckedSideEffectImports": true,
+        "skipLibCheck": true,
+        "allowJs": true,
+        "checkJs": true,
+        "strictNullChecks": true,
+        "composite": true
+    }
+}

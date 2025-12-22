@@ -37,9 +37,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run type tests
+        run: pnpm test:types
+
       - name: Build package
         run: pnpm run build
 
-      # ⚠️ IMPORTANT: Trusted publishing requires npm publish (not pnpm)
       - name: Publish to NPM (OIDC)
         run: npm publish --no-git-checks
