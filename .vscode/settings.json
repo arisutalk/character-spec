@@ -10,6 +10,9 @@
             "source.organizeImports.biome": "explicit"
         }
     },
+    "[json]": {
+        "editor.tabSize": 4
+    },
     "typescript.preferences.preferTypeOnlyAutoImports": true,
     "typescript.preferences.importModuleSpecifier": "non-relative"
 }
