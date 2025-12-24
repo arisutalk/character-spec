@@ -56,6 +56,7 @@ export default defineConfig({
         lib: {
             entry: {
                 index: "src/index.ts",
+                utils: "src/utils.ts",
                 ...typeEntries,
             },
             fileName: (_, entryName) => `${entryName}.js`,
