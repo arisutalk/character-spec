@@ -27,9 +27,11 @@ export const AssetsSettingSchema = z
     .object({
         assets: z
             .array(AssetEntitySchema)
+            .default([])
             .refine(unique("name"), { message: "Not unique key: name" })
             .meta({ description: "The assets of the character." }),
     })
+    .prefault({})
     .meta({ description: "Settings for character assets." });
 
 /**
