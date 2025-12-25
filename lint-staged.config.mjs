@@ -1,9 +1,0 @@
-//@ts-check
-/**
- * @type {import("lint-staged").Configuration}
- */
-export default {
-    "src/**/*.{js,json,md,ts}": "biome lint --write",
-    "*.json": "biome format --write",
-    ".vscode/*": "biome format --write",
-};
