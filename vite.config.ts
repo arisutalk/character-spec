@@ -40,7 +40,7 @@ const typeEntries = getEntries(resolve(__dirname, "src/types"));
 
 const dtsConfig = dts({
     include: ["src/**/*.ts"],
-    exclude: ["src/types/**/*.ts", "**/*.test.ts", "**/*.spec.ts"],
+    exclude: ["**/*.test.ts", "**/*.spec.ts"],
     tsconfigPath: "./tsconfig.main.json",
     entryRoot: "src",
 });
