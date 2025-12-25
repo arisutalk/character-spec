@@ -41,7 +41,7 @@ jobs:
         run: pnpm run build
 
       - name: Run type tests
-        run: pnpm test:types
+        run: pnpm test
 
       - name: Publish to NPM (OIDC)
         run: npm publish --no-git-checks
