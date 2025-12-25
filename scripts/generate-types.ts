@@ -831,8 +831,11 @@ function generateTypesForModule(
         if (existingDtsContent) {
             // Try to extract transparent type from existing .d.ts
             // Look for: export declare const CharacterSchema: ...;
-            const escapedName = exportName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            
+            const escapedName = exportName.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&",
+            );
+
             // Regex explanation:
             // Match "export declare const Name:"
             // Capture everything ([\s\S]+?)
@@ -841,7 +844,7 @@ function generateTypesForModule(
             const regex = new RegExp(
                 `export declare const ${escapedName}: ([\\s\\S]+?)(?=\\nexport |$)`,
             );
-            
+
             const match = existingDtsContent.match(regex);
             if (match) {
                 let typeStr = match[1].trim();
@@ -1069,12 +1072,12 @@ async function main(): Promise<void> {
                 // Assuming DIST_DIR is used to construct outFsPath
                 const relativeToDist = path.relative(DIST_DIR, outFsPath);
                 const typesPath = path.join(DIST_DIR, "types", relativeToDist);
-                
+
                 if (existsSync(typesPath)) {
                     existingDtsContent = await fs.readFile(typesPath, "utf8");
                 }
             }
-        } catch (e) {
+        } catch {
             // ignore
         }
 
