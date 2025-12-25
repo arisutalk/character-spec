@@ -1,5 +1,4 @@
 //@ts-check
 export default {
-    "pre-commit":
-        "pnpm lint-staged --config lint-staged.config.mjs && pnpm format",
+    "pre-commit": "pnpm format && pnpm lint:fix",
 };
