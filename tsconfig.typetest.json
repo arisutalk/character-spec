@@ -7,6 +7,7 @@
     "include": [
         "scripts/type-test.ts",
         "scripts/type-test-utils.ts",
+        "scripts/transparency-test.ts",
         "src/**/*",
         "dist/**/*"
     ]
