@@ -25,7 +25,7 @@ export const Uint8ArraySchema = z
     })
     .meta({
         description: "The binary data of the file. Used for local assets.",
-        tsType: "Uint8Array",
+        tsType: "Uint8Array<ArrayBuffer>",
     });
 
 /**
