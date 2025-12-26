@@ -429,7 +429,7 @@ function getCustomOverrideTypeNode(
 
     // Check via internal checks array
     if (matchesInstanceofViaDefChecks(schema, Uint8Array)) {
-        return ts.factory.createTypeReferenceNode("Uint8Array", undefined);
+        return parseTypeNodeFromString("Uint8Array<ArrayBuffer>", context);
     }
     if (matchesInstanceofViaDefChecks(schema, ArrayBuffer)) {
         return ts.factory.createTypeReferenceNode("ArrayBuffer", undefined);
@@ -438,7 +438,7 @@ function getCustomOverrideTypeNode(
     // Try detecting instanceof class
     const detectedClass = detectInstanceofClass(schema);
     if (detectedClass === Uint8Array) {
-        return ts.factory.createTypeReferenceNode("Uint8Array", undefined);
+        return parseTypeNodeFromString("Uint8Array<ArrayBuffer>", context);
     }
     if (detectedClass === ArrayBuffer) {
         return ts.factory.createTypeReferenceNode("ArrayBuffer", undefined);
@@ -451,7 +451,7 @@ function getCustomOverrideTypeNode(
     const pred = getCustomPredicate(schema);
     if (pred) {
         const candidates: Array<{ ctor: unknown; tsName: string }> = [
-            { ctor: Uint8Array, tsName: "Uint8Array" },
+            { ctor: Uint8Array, tsName: "Uint8Array<ArrayBuffer>" },
             { ctor: ArrayBuffer, tsName: "ArrayBuffer" },
         ];
 
@@ -475,7 +475,7 @@ function getCustomOverrideTypeNode(
             }
 
             if (okSample && okRejects) {
-                return ts.factory.createTypeReferenceNode(c.tsName, undefined);
+                return parseTypeNodeFromString(c.tsName, context);
             }
         }
     }
