@@ -86,26 +86,24 @@ function is<A, B>(
 
 /**
  * Test Character/Assets types
- * Note: AssetEntity contains Uint8Array, causing generic parameter differences
  */
 function testAssetsTypes() {
-    // AssetEntity - only infer -> generated (Uint8Array issue)
-    it(AssetEntitySchema) satisfies AssetEntity;
+    // AssetEntity - bidirectional
+    is(AssetEntitySchema, it<AssetEntity>());
 
-    // AssetsSetting - only infer -> generated (contains AssetEntity)
-    it(AssetsSettingSchema) satisfies AssetsSetting;
+    // AssetsSetting - bidirectional
+    is(AssetsSettingSchema, it<AssetsSetting>());
 }
 
 /**
  * Test Character/Character types
  */
 function testCharacterTypes() {
-    // Character - only infer -> generated (contains AssetEntity)
-    it(CharacterSchema) satisfies Character;
+    // Character - bidirectional
+    is(CharacterSchema, it<Character>());
 
     // CharacterPromptData - bidirectional
-    it(CharacterPromptDataSchema) satisfies CharacterPromptData;
-    is(it<CharacterPromptData>(), CharacterPromptDataSchema);
+    is(CharacterPromptDataSchema, it<CharacterPromptData>());
 }
 
 /**
@@ -137,12 +135,11 @@ function testLorebookTypes() {
  * Test Character/Message types
  */
 function testMessageTypes() {
-    // Message - only infer -> generated (contains FileType with Uint8Array)
-    it(MessageSchema) satisfies Message;
+    // Message - bidirectional
+    is(MessageSchema, it<Message>());
 
     // Role - bidirectional
-    it(RoleSchema) satisfies Role;
-    it<Role>() satisfies z.infer<typeof RoleSchema>;
+    is(RoleSchema, it<Role>());
 }
 
 /**
@@ -179,15 +176,14 @@ function testExecutablesTypes() {
  * Test Utils types
  */
 function testUtilsTypes() {
-    // FileType - only infer -> generated (Uint8Array issue)
-    it(FileSchema) satisfies FileType;
+    // FileType - bidirectional
+    is(FileSchema, it<FileType>());
 
     // ImageURL - bidirectional
-    it(ImageURLSchema) satisfies ImageURL;
-    it<ImageURL>() satisfies z.infer<typeof ImageURLSchema>;
+    is(ImageURLSchema, it<ImageURL>());
 
-    // Uint8ArrayType - only infer -> generated (Uint8Array generic difference)
-    it(Uint8ArraySchema) satisfies Uint8ArrayType;
+    // Uint8ArrayType - bidirectional
+    is(Uint8ArraySchema, it<Uint8ArrayType>());
 }
 
 // =============================================================================

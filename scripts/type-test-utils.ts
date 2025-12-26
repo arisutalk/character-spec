@@ -3,13 +3,9 @@
  */
 
 /**
- * Bidirectional check, except Uint8Array
+ * Bidirectional check.
  */
-export type Equals<A, B> = A extends Uint8Array<ArrayBuffer | ArrayBufferLike>
-    ? B extends Uint8Array<ArrayBuffer | ArrayBufferLike>
-        ? true
-        : false
-    : StrictlyEquals<A, B>;
+export type Equals<A, B> = StrictlyEquals<A, B>;
 /**
  * Checks if two types are exactly equal.
  * @template A The first type to compare.
