@@ -9,14 +9,16 @@ describe("Uint8ArraySchema", () => {
     });
 
     it("rejects Uint8Array with SharedArrayBuffer", () => {
-        // SharedArrayBuffer might not be available in all environments, 
+        // SharedArrayBuffer might not be available in all environments,
         // but Vitest/Node usually supports it if started with correct flags or by default in recent versions.
         if (typeof SharedArrayBuffer !== "undefined") {
             const sharedBuffer = new SharedArrayBuffer(8);
             const uint8Array = new Uint8Array(sharedBuffer);
             expect(() => Uint8ArraySchema.parse(uint8Array)).toThrow();
         } else {
-            console.warn("SharedArrayBuffer is not defined in this environment, skipping rejection test.");
+            console.warn(
+                "SharedArrayBuffer is not defined in this environment, skipping rejection test.",
+            );
         }
     });
 
