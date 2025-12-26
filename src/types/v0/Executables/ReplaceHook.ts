@@ -19,7 +19,7 @@ const ReplaceHookMetaType = [
             }),
         })
         .meta({ description: "String pattern type." }),
-] as const;
+] as const satisfies Array<z.ZodObject<{ type: z.ZodLiteral<string> }>>;
 
 export const ReplaceHookMetaSchema = z
     .intersection(

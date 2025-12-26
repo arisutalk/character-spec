@@ -52,17 +52,17 @@ export const MessageSchema = z
                 MessageContentSchema.file,
             ])
             .meta({ description: "The content of the message." }),
-        timestamp: z.number().optional().meta({
+        timestamp: z.number().default(Date.now).meta({
             description: "The timestamp when the message was created.",
         }),
         inlays: z
             .array(AssetEntitySchema)
             .refine(unique("name"), { message: "Not unique key: name" })
+            .default([])
             .meta({
                 description:
                     "The inlays of the message. It is not intended to be exported as public.",
-            })
-            .default([]),
+            }),
     })
     .meta({ description: "Represents a single message in a chat history." });
 

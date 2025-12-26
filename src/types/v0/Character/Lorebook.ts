@@ -73,7 +73,7 @@ export const LorebookEntrySchema = z
             }),
         multipleConditionResolveStrategy: z
             .enum(["all", "any"])
-            .optional()
+            .default("any")
             .meta({
                 description:
                     "The strategy for resolving multiple conditions. 'all' means all must be met, 'any' means at least one.",
@@ -88,7 +88,7 @@ export const LorebookEntrySchema = z
         }),
         enabled: z
             .boolean()
-            .optional()
+            .default(true)
             .meta({ description: "Whether the lorebook is enabled." }),
     })
     .meta({
@@ -128,11 +128,11 @@ export const LorebookDataSchema = z
                     "Contains the actual lorebooks. Duplicated id is not allowed.",
             }),
     })
+    .prefault({})
     .meta({
         description:
             "Object containing data for the lorebook. Meant to be stored in the database.",
-    })
-    .prefault({});
+    });
 
 /**
  * Object containing all data for the lorebook.
