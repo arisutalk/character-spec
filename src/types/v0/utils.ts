@@ -18,10 +18,15 @@ export const ImageURLSchema = z.url().meta({
  * Binary data represented as Uint8Array.
  * Useful for local file assets.
  */
-export const Uint8ArraySchema = z.instanceof(Uint8Array).meta({
-    description: "The binary data of the file. Used for local assets.",
-    tsType: "Uint8Array",
-});
+export const Uint8ArraySchema = z
+    .instanceof(Uint8Array)
+    .refine((v): v is Uint8Array<ArrayBuffer> => v.buffer instanceof ArrayBuffer, {
+        message: "Uint8Array must be backed by an ArrayBuffer, not SharedArrayBuffer",
+    })
+    .meta({
+        description: "The binary data of the file. Used for local assets.",
+        tsType: "Uint8Array",
+    });
 
 /**
  * Represents a file, either as a URL or as binary data (Uint8Array).
