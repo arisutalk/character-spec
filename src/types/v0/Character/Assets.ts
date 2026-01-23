@@ -3,13 +3,18 @@ import { FileSchema, unique } from "@/types/v0/utils";
 
 export const AssetEntitySchema = z
     .object({
+        id: z.string().meta({
+            description:
+                "The ID of the asset. Used as the key. Should be unique.",
+        }),
         mimeType: z.string().meta({
             description:
                 "MIME type of the asset. Usually `image/*` or `video/*`.",
         }),
         name: z.string().meta({
             description:
-                "The name of the asset. Used as the file name. Should be unique.",
+                "The name of the asset. Used as the file name. " +
+                "If multiple assets have the same name, random one will be used.",
         }),
         data: FileSchema.meta({
             description: "The data of the asset.",
@@ -28,7 +33,7 @@ export const AssetsSettingSchema = z
         assets: z
             .array(AssetEntitySchema)
             .default([])
-            .refine(unique("name"), { message: "Not unique key: name" })
+            .refine(unique("id"), { message: "Not unique key: id" })
             .meta({ description: "The assets of the character." }),
     })
     .prefault({})
