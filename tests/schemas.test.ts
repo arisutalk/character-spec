@@ -58,11 +58,13 @@ describe("Schema basics", () => {
         const valid = {
             assets: [
                 {
+                    id: "asset-1",
                     mimeType: "image/png",
                     name: "a.png",
                     data: "http://example.com/a.png",
                 },
                 {
+                    id: "asset-2",
                     mimeType: "image/png",
                     name: "b.png",
                     data: "http://example.com/b.png",
@@ -75,11 +77,13 @@ describe("Schema basics", () => {
         const invalid = {
             assets: [
                 {
+                    id: "asset-dup-1",
                     mimeType: "image/png",
                     name: "dup.png",
                     data: "http://example.com/a.png",
                 },
                 {
+                    id: "asset-dup-1",
                     mimeType: "image/png",
                     name: "dup.png",
                     data: "http://example.com/b.png",
