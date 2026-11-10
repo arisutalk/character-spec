@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 const ReplaceHookMetaType = [
     z
@@ -45,51 +45,44 @@ export const ReplaceHookMetaSchema = z
         description: "The meta data for the replace hook.",
     });
 
-export const ReplaceHookEntitySchema = z.object({
-    input: z.string().meta({
+export const ReplaceHookEntitySchema = z
+    .object({
+        input: z.string().meta({
+            description:
+                "The input pattern. May contain additional javascript expression if `isInputPatternScripted` is true.",
+        }),
+        meta: ReplaceHookMetaSchema,
+        output: z.string().meta({
+            description:
+                "The output. May contain additional javascript expression if `isOutputScripted` is true.",
+        }),
+    })
+    .meta({
         description:
-            "The input pattern. May contain additional javascript expression if `isInputPatternScripted` is true.",
-    }),
-    meta: ReplaceHookMetaSchema,
-    output: z.string().meta({
-        description:
-            "The output. May contain additional javascript expression if `isOutputScripted` is true.",
-    }),
-});
+            "A replace hook. Replaces what matches the input pattern by the output.",
+    });
 
 /**
  * Replace hooks. It's technically RegExp for request, display, and response.
  */
 export const ReplaceHookSchema = z
     .object({
-        display: z
-            .array(ReplaceHookEntitySchema)
-            .meta({
-                description:
-                    "Replace hooks for display. Doesn't edit the data, only changes the display.",
-            })
-            .default([]),
-        input: z
-            .array(ReplaceHookEntitySchema)
-            .meta({
-                description:
-                    "Replace hooks for input. User chat input will be edited by this.",
-            })
-            .default([]),
-        output: z
-            .array(ReplaceHookEntitySchema)
-            .meta({
-                description:
-                    "Replace hooks for output. Character response will be edited by this.",
-            })
-            .default([]),
-        request: z
-            .array(ReplaceHookEntitySchema)
-            .meta({
-                description:
-                    "Replace hooks for request. AI request will be edited by this. Differs from `input` in that it's for AI request. Does not edit the data, only changes the fetching request.",
-            })
-            .default([]),
+        display: z.array(ReplaceHookEntitySchema).default([]).meta({
+            description:
+                "Replace hooks for display. Doesn't edit the data, only changes the display.",
+        }),
+        input: z.array(ReplaceHookEntitySchema).default([]).meta({
+            description:
+                "Replace hooks for input. User chat input will be edited by this.",
+        }),
+        output: z.array(ReplaceHookEntitySchema).default([]).meta({
+            description:
+                "Replace hooks for output. Character response will be edited by this.",
+        }),
+        request: z.array(ReplaceHookEntitySchema).default([]).meta({
+            description:
+                "Replace hooks for request. AI request will be edited by this. Differs from `input` in that it's for AI request. Does not edit the data, only changes the fetching request.",
+        }),
     })
     .prefault({})
     .meta({

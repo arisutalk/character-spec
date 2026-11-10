@@ -1,7 +1,8 @@
 {
     "name": "@arisutalk/character-spec",
+    "version": "0.0.18",
     "description": "Character specification, schema & migration for ArisuTalk",
-    "version": "0.0.17",
+    "license": "Apache-2.0",
     "contributors": [
         {
             "name": "concertypin",
@@ -9,53 +10,75 @@
         }
     ],
     "repository": "github:arisutalk/character-spec",
-    "license": "Apache-2.0",
-    "engines": {
-        "node": ">=22"
+    "files": [
+        "dist",
+        "CHANGELOG.md"
+    ],
+    "type": "module",
+    "sideEffects": false,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "typesVersions": {
+        "*": {
+            "v0": [
+                "dist/v0.d.ts"
+            ],
+            "utils": [
+                "dist/utils.d.ts"
+            ]
+        }
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./v0": {
+            "types": "./dist/v0.d.ts",
+            "default": "./dist/v0.js"
+        },
+        "./utils": {
+            "types": "./dist/utils.d.ts",
+            "default": "./dist/utils.js"
+        },
+        "./package.json": "./package.json"
     },
     "publishConfig": {
         "access": "public"
     },
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "files": [
-        "dist"
-    ],
-    "type": "module",
     "scripts": {
         "build": "vite build && pnpm generate-types",
         "generate-types": "tsx --tsconfig ./tsconfig.base.json scripts/generate-types.ts",
         "prepare": "pnpm exec simple-git-hooks",
-        "format": "biome format --write .",
-        "lint": "biome check .",
-        "test": "pnpm test:types && vitest run",
-        "test:types": "tsc -p tsconfig.typetest.json --noEmit"
+        "format": "oxfmt",
+        "format:check": "oxfmt --check",
+        "lint": "oxlint && pnpm lint:untyped",
+        "lint:fix": "oxlint --fix && pnpm lint:untyped --fix",
+        "lint:untyped": "oxlint -c oxlint.untyped.config.ts tests/type-details.test.ts scripts/type-test.ts",
+        "test": "pnpm build && pnpm test:types && vitest run",
+        "test:types": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.dist.json --noEmit"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "eslint-plugin-zod": "^4.11.0",
+        "oxfmt": "^0.65.0",
+        "oxlint": "^1.80.0",
+        "oxlint-tsgolint": "^7.0.2001",
+        "simple-git-hooks": "^2.14.0",
+        "tinyglobby": "^0.2.17",
+        "tsx": "^4.23.13",
+        "typescript": "~5.8.2",
+        "vite": "^8.2.2",
+        "vite-plugin-dts": "^5.0.3",
+        "vitest": "^4.1.11",
+        "zod": "^4.5.4",
+        "zod-to-ts": "^2.1.0"
     },
     "peerDependencies": {
         "zod": "^4.1.13"
     },
-    "devDependencies": {
-        "@biomejs/biome": "^2.3.5",
-        "simple-git-hooks": "^2.13.1",
-        "tinyglobby": "^0.2.15",
-        "tsx": "^4.19.2",
-        "typescript": "~5.9.3",
-        "vite": "^6.4.1",
-        "vite-plugin-dts": "^4.5.4",
-        "vite-tsconfig-paths": "^5.1.4",
-        "vitest": "^4.0.16",
-        "zod": "^4.1.13",
-        "zod-to-ts": "^2.0.0"
-    },
-    "exports": {
-        ".": {
-            "import": "./dist/index.js",
-            "types": "./dist/index.d.ts"
-        },
-        "./*": {
-            "import": "./dist/*.js",
-            "types": "./dist/*.d.ts"
-        }
+    "engines": {
+        "node": ">=22"
     },
     "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706"
 }

@@ -3,18 +3,23 @@ import {
     CharacterSchema as CharacterV0Schema,
 } from "@/types/v0/Character/Character";
 
+export { CharacterV0Schema };
+export type { CharacterV0 };
+
 /**
  * Version-schema pair of character specification
  */
 export const characterMap = {
     0: CharacterV0Schema,
 } as const;
+
 /**
  * Version-type pair of character specification
  */
 export type CharacterMap = {
     "0": CharacterV0;
 };
+
 /**
  * Latest character specification
  */

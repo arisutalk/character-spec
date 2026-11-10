@@ -1,5 +1,6 @@
-import { z } from "zod";
-import { positiveInteger, unique } from "@/types/v0/utils";
+import * as z from "zod";
+
+import { positiveIntegerSchema, uniqueIdArray } from "@/types/v0/utils";
 
 /**
  * Lorebook condition detail schemas organized by type.
@@ -36,16 +37,34 @@ export const LorebookConditionDetails = {
                 .meta({ description: "This condition is always true." }),
         })
         .meta({ description: "Always active condition." }),
+    custom: z
+        .object({
+            type: z.literal("custom").meta({
+                description:
+                    "This condition is custom. " +
+                    "There's no guarantee that the client can handle it. Intended to be used by plugin. Use with caution. " +
+                    "Keep in mind that if client cannot handle it, it will be ignored.",
+            }),
+            data: z.string().optional().meta({
+                description: "The custom data for the condition.",
+            }),
+        })
+        .meta({ description: "Custom condition. Handled by plugins only." }),
 } as const;
 
 /**
  * The condition for the lorebook to be activated.
  */
-export const LorebookConditionSchema = z.discriminatedUnion("type", [
-    LorebookConditionDetails.regex,
-    LorebookConditionDetails.plainText,
-    LorebookConditionDetails.always,
-]);
+export const LorebookConditionSchema = z
+    .discriminatedUnion("type", [
+        LorebookConditionDetails.regex,
+        LorebookConditionDetails.plainText,
+        LorebookConditionDetails.always,
+        LorebookConditionDetails.custom,
+    ])
+    .meta({
+        description: "The condition for the lorebook to be activated.",
+    });
 
 /**
  * The condition for the lorebook to be activated.
@@ -109,9 +128,9 @@ export const LorebookDataSchema = z
     .object({
         config: z
             .object({
-                tokenLimit: positiveInteger.optional().meta({
+                tokenLimit: positiveIntegerSchema.optional().meta({
                     description:
-                        "The token limit for the lorebook. When exceeded, low-priority lorebooks will be deactivated. Positive integer.",
+                        "The token limit for the lorebook. When exceeded, low-priority lorebooks will be deactivated. Positive integer. If not set, there is no limit.",
                 }),
             })
             .prefault({})
@@ -119,14 +138,10 @@ export const LorebookDataSchema = z
                 description:
                     "The configuration for the lorebook. Not scriptable.",
             }),
-        data: z
-            .array(LorebookEntrySchema)
-            .refine(unique("id"), { message: "Not unique key: id" })
-            .default([])
-            .meta({
-                description:
-                    "Contains the actual lorebooks. Duplicated id is not allowed.",
-            }),
+        data: uniqueIdArray(LorebookEntrySchema).meta({
+            description:
+                "Contains the actual lorebooks. Duplicated id is not allowed.",
+        }),
     })
     .prefault({})
     .meta({

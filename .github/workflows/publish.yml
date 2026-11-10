@@ -1,47 +1,45 @@
 name: NPM Publish on Tag
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*' 
+    push:
+        tags:
+            - "v[0-9]+.[0-9]+.[0-9]+*"
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # ✅ OIDC 토큰 발급을 위해 이 권한이 필요합니다!
-      id-token: write 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    publish:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            # ✅ OIDC 토큰 발급을 위해 이 권한이 필요합니다!
+            id-token: write
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          package_json_file: "package.json"
-          run_install: false
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  package_json_file: "package.json"
+                  run_install: false
 
-      - name: Setup Node.js (Trusted Publishing OIDC)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-          cache-dependency-path: "pnpm-lock.yaml"
-          registry-url: 'https://registry.npmjs.org' 
+            - name: Setup Node.js (Trusted Publishing OIDC)
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: "pnpm"
+                  cache-dependency-path: "pnpm-lock.yaml"
+                  registry-url: "https://registry.npmjs.org"
 
-      # Ensure npm 11.5.1 or later for OIDC trusted publishing
-      - name: Update npm
-        run: npm install -g npm@latest
+            # Ensure npm 11.5.1 or later for OIDC trusted publishing
+            - name: Update npm
+              run: npm install -g npm@latest
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        
-      - name: Build package
-        run: pnpm run build
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Run type tests
-        run: pnpm test
+            # `pnpm test` builds the package first, then runs the type and unit tests.
+            - name: Build and test package
+              run: pnpm test
 
-      - name: Publish to NPM (OIDC)
-        run: npm publish --no-git-checks
+            - name: Publish to NPM (OIDC)
+              run: npm publish --no-git-checks

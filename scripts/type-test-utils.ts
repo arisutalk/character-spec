@@ -12,11 +12,10 @@ export type Equals<A, B> = StrictlyEquals<A, B>;
  * @template B The second type to compare.
  * Returns true if A and B are the same type, false otherwise.
  */
-export type StrictlyEquals<A, B> = (<T>() => T extends A ? 1 : 2) extends <
-    T,
->() => T extends B ? 1 : 2
-    ? true
-    : false;
+export type StrictlyEquals<A, B> =
+    (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+        ? true
+        : false;
 
 /**
  * Expect<T> - Compiles only if T is true.

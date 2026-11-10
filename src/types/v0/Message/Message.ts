@@ -1,6 +1,7 @@
-import { z } from "zod";
-import { AssetEntitySchema } from "@/types/v0/Character/Assets";
-import { FileSchema, unique } from "@/types/v0/utils";
+import * as z from "zod";
+
+import { AssetEntitySchema } from "@/types/v0/Assets/Assets";
+import { FileSchema, uniqueIdArray } from "@/types/v0/utils";
 
 /**
  * Represents the role of the message sender.
@@ -53,16 +54,13 @@ export const MessageSchema = z
             ])
             .meta({ description: "The content of the message." }),
         timestamp: z.number().default(Date.now).meta({
-            description: "The timestamp when the message was created.",
+            description:
+                "The timestamp when the message was created, in milliseconds.",
         }),
-        inlays: z
-            .array(AssetEntitySchema)
-            .refine(unique("name"), { message: "Not unique key: name" })
-            .default([])
-            .meta({
-                description:
-                    "The inlays of the message. It is not intended to be exported as public.",
-            }),
+        inlays: uniqueIdArray(AssetEntitySchema).meta({
+            description:
+                "The inlays of the message. Duplicated id is not allowed. It is not intended to be exported as public.",
+        }),
     })
     .meta({ description: "Represents a single message in a chat history." });
 

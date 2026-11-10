@@ -1,9 +1,10 @@
-import { z } from "zod";
-import { FileSchema, unique } from "@/types/v0/utils";
+import * as z from "zod";
+
+import { FileSchema, uniqueIdArray } from "@/types/v0/utils";
 
 export const AssetEntitySchema = z
     .object({
-        id: z.string().meta({
+        id: z.string().trim().meta({
             description:
                 "The ID of the asset. Used as the key. Should be unique.",
         }),
@@ -30,11 +31,10 @@ export const AssetEntitySchema = z
  */
 export const AssetsSettingSchema = z
     .object({
-        assets: z
-            .array(AssetEntitySchema)
-            .default([])
-            .refine(unique("id"), { message: "Not unique key: id" })
-            .meta({ description: "The assets of the character." }),
+        assets: uniqueIdArray(AssetEntitySchema).meta({
+            description:
+                "The assets of the character. Duplicated id is not allowed.",
+        }),
     })
     .prefault({})
     .meta({ description: "Settings for character assets." });

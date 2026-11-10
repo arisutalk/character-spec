@@ -1,5 +1,6 @@
-import { z } from "zod";
-import { AssetsSettingSchema } from "@/types/v0/Character/Assets";
+import * as z from "zod";
+
+import { AssetsSettingSchema } from "@/types/v0/Assets/Assets";
 import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
 import { MetaSchema } from "@/types/v0/Character/Meta";
 import { ScriptSettingSchema as ExecutableSettingSchema } from "@/types/v0/Executables/Executable";
@@ -46,10 +47,16 @@ export const CharacterSchema = z
             description:
                 "A short description of the character. Human readable, not scriptable.",
         }),
-        avatarUrl: z.string().optional().meta({
-            description:
-                "Optional name of asset for the character's avatar image.",
-        }),
+        avatarUrl: z
+            .string()
+            .optional()
+            .meta({
+                description:
+                    "Optional avatar image of the character, as an image URL. " +
+                    "Use the same string as the `data` of an entry in `assets` " +
+                    "(e.g. `local://opfs/<file>`) to reuse that asset, " +
+                    "or any fetchable image URL. It is not an asset `id`.",
+            }),
         prompt: CharacterPromptDataSchema.meta({
             description: "The prompt data for the character.",
         }),

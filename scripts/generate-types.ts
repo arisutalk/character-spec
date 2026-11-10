@@ -1,25 +1,36 @@
 /**
- * Generate .d.ts files from Zod schemas with JSDoc extracted from schema metadata.
+ * Generate the published .d.ts files from the Zod schemas, with JSDoc taken from
+ * the schemas' `.meta({ description })`.
+ *
+ * Inputs:
+ * - the schema modules in `src/types` (imported at runtime, via tsx)
+ * - the intermediate declarations emitted by `vite build` (vite-plugin-dts) in
+ *   `node_modules/.cache/character-spec-dts`. They carry the precise Zod types
+ *   of every export, and mirror the barrel (`index.ts`) structure of `src`.
+ *
+ * Output (`dist`):
+ * - one .d.ts per schema module: JSDoc-rich plain types (zod-to-ts), the schema
+ *   declarations, and every other export of the module
+ * - the barrel of each spec version (`v0.d.ts` for `src/types/v0/index.ts`),
+ *   which re-exports the schema modules directly with `.js` extensions, so it
+ *   resolves under every `moduleResolution`. The barrels of the folders are not
+ *   emitted: nobody can import them, and they have no runtime counterpart.
+ * - `index.d.ts` (entry point) and the top-level modules such as `utils.d.ts`
  *
  * This script is ERROR-INTOLERANT: it will fail loudly on any unexpected condition.
+ * Any export ending with "Schema" MUST be a Zod schema, and every runtime export
+ * MUST end up declared.
  *
- * Features:
- * - Scans src/types directory recursively (excluding index.ts)
- * - Any export ending with "Schema" MUST be a Zod schema (else: throw)
- * - Generates type aliases + JSDoc comments from .meta() / .describe()
- * - Mirrors directory structure into dist/
- * - Supports z.instanceof(Uint8Array) and other custom schemas via meta.tsType
- * - Property-level JSDoc comments are preserved
- *
- * Run: pnpm generate-types
+ * Run (after `vite build`): pnpm generate-types
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
 import { glob } from "tinyglobby";
 import ts from "typescript";
-import { ZodType, z } from "zod";
+import * as z from "zod";
 import {
     createAuxiliaryTypeStore,
     createTypeAlias,
@@ -27,7 +38,6 @@ import {
     type TypeOverrideMap,
     zodToTs,
 } from "zod-to-ts";
-import tsconfig from "../tsconfig.base.json";
 
 // =============================================================================
 // Configuration
@@ -36,8 +46,16 @@ import tsconfig from "../tsconfig.base.json";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SRC_DIR = path.resolve(__dirname, "../src/types");
-const DIST_DIR = path.resolve(__dirname, "../dist");
+const ROOT_DIR = path.resolve(__dirname, "..");
+const SRC_DIR = path.join(ROOT_DIR, "src/types");
+const DIST_DIR = path.join(ROOT_DIR, "dist");
+/** Must match `DTS_CACHE_DIR` of vite.config.ts. */
+const DTS_CACHE_DIR = path.join(
+    ROOT_DIR,
+    "node_modules/.cache/character-spec-dts",
+);
+/** Directory of `SRC_DIR` inside the declaration cache (see `entryRoot` of vite.config.ts). */
+const DTS_CACHE_TYPES_DIR = path.join(DTS_CACHE_DIR, "types");
 
 const SCHEMA_EXPORT_SUFFIX = "Schema";
 const IGNORE_GLOBS = Object.freeze([
@@ -46,7 +64,7 @@ const IGNORE_GLOBS = Object.freeze([
     "**/*.spec.ts",
 ]);
 
-const RESERVED_TYPE_NAMES = Object.freeze([
+const RESERVED_TYPE_NAMES: readonly string[] = Object.freeze([
     "Uint8Array",
     "File",
     "Blob",
@@ -56,7 +74,7 @@ const RESERVED_TYPE_NAMES = Object.freeze([
     "Set",
     "Promise",
     "Error",
-] as const);
+]);
 
 // =============================================================================
 // Error Handling
@@ -83,17 +101,6 @@ class TypeGenerationError extends Error {
     }
 }
 
-class SchemaExtractionError extends Error {
-    constructor(
-        message: string,
-        public readonly schemaName: string,
-        public readonly cause?: unknown,
-    ) {
-        super(`[Schema: ${schemaName}] ${message}`);
-        this.name = "SchemaExtractionError";
-    }
-}
-
 // =============================================================================
 // Types
 // =============================================================================
@@ -104,25 +111,30 @@ interface SchemaEntry {
     /** Original export name (e.g., "CharacterSchema") */
     readonly exportName: string;
     /** Zod schema instance */
-    readonly schema: z.ZodTypeAny;
+    readonly schema: z.ZodType;
 }
 
+/** Any constructor, used to recognise `z.instanceof(...)` schemas. */
+type AnyConstructor = abstract new (...args: never[]) => unknown;
+
+type Predicate = (value: unknown) => unknown;
+
+/** The parts of a Zod schema definition this script looks at. */
 interface ZodDefWithMeta {
     readonly type?: string;
     readonly fn?: unknown;
+    readonly check?: unknown;
+    readonly predicate?: unknown;
     readonly format?: string;
-    readonly innerType?: ZodType;
-    readonly schema?: ZodType;
-    readonly left?: ZodType;
-    readonly right?: ZodType;
-    readonly options?: readonly unknown[];
     readonly shape?: (() => Record<string, unknown>) | Record<string, unknown>;
-    readonly element?: ZodType;
-    readonly items?: readonly unknown[];
-    readonly valueType?: ZodType;
-    readonly keyType?: ZodType;
-    readonly cls?: new (...args: unknown[]) => unknown;
+    readonly cls?: unknown;
     readonly checks?: readonly unknown[];
+    readonly innerType?: unknown;
+    readonly element?: unknown;
+    readonly options?: readonly unknown[];
+    readonly left?: unknown;
+    readonly right?: unknown;
+    readonly catchall?: unknown;
 }
 
 interface SchemaMeta {
@@ -136,17 +148,26 @@ interface SchemaMeta {
     readonly tsType?: unknown;
 }
 
+/** A top-level export of an intermediate declaration file. */
+interface PluginDeclaration {
+    /** `value` for const/function, `type` for type alias/interface. */
+    readonly kind: "value" | "type";
+    /** The annotated type of a `const`. Undefined for the others. */
+    readonly typeText: string | undefined;
+    /** The whole statement, including its leading JSDoc. */
+    readonly text: string;
+}
+
 // =============================================================================
 // Utility Functions
 // =============================================================================
 
-function toPosix(p: string): string {
-    return p.replaceAll("\\", "/");
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
 }
 
-function fsPathFromPosixRelative(root: string, posixRel: string): string {
-    const parts = posixRel.split("/").filter(Boolean);
-    return path.join(root, ...parts);
+function toPosix(p: string): string {
+    return p.replaceAll("\\", "/");
 }
 
 function ensureValidTsIdentifier(name: string, context: string): void {
@@ -157,12 +178,20 @@ function ensureValidTsIdentifier(name: string, context: string): void {
     );
 }
 
-function isZodType(value: unknown): value is ZodType {
-    return value instanceof ZodType;
+function isFunction(value: unknown): value is Predicate & AnyConstructor {
+    return typeof value === "function";
 }
 
-function getZodDef(schema: ZodType): ZodDefWithMeta | undefined {
-    return schema.def as ZodDefWithMeta | undefined;
+function getZodDef(schema: z.ZodType): ZodDefWithMeta {
+    return schema.def;
+}
+
+async function writeFileEnsuringDir(
+    filePath: string,
+    content: string,
+): Promise<void> {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, content, "utf8");
 }
 
 /**
@@ -189,11 +218,7 @@ function deriveTypeName(schemaExportName: string): string {
     base = base.charAt(0).toUpperCase() + base.slice(1);
 
     // Avoid conflicts with global types
-    if (
-        RESERVED_TYPE_NAMES.includes(
-            base as (typeof RESERVED_TYPE_NAMES)[number],
-        )
-    ) {
+    if (RESERVED_TYPE_NAMES.includes(base)) {
         return `${base}Type`;
     }
 
@@ -206,43 +231,10 @@ function deriveTypeName(schemaExportName: string): string {
 // =============================================================================
 
 /**
- * Reads metadata from a Zod schema (supports multiple Zod versions).
+ * Reads the metadata (`.meta()` / `.describe()`) of a Zod schema.
  */
-function readSchemaMeta(schema: z.ZodTypeAny): SchemaMeta {
-    // Zod v4: Try calling .meta() method first
-    if ("meta" in schema && typeof schema.meta === "function") {
-        try {
-            // In Zod v4, schema.meta() returns the stored meta when called without args
-            const metaResult = (schema as { meta: () => unknown }).meta();
-            if (metaResult && typeof metaResult === "object") {
-                return metaResult satisfies SchemaMeta;
-            }
-        } catch {
-            // meta() might throw or return the schema itself with args
-        }
-    }
-
-    // biome-ignore lint/suspicious/noExplicitAny: Need to try various locations where Zod stores metadata
-    const def: any = schema.def;
-
-    // Try various locations where Zod stores metadata
-    const meta: SchemaMeta | undefined =
-        ("meta" in schema.def ? schema.def.meta : undefined) ??
-        ("metadata" in schema.def ? schema.def.metadata : undefined) ??
-        def.params?.meta ??
-        def.openapi?.meta ??
-        undefined;
-
-    const description =
-        meta?.description ??
-        ("description" in schema.def
-            ? schema.def.description
-            : schema.description);
-
-    return {
-        ...(typeof meta === "object" && meta !== null ? meta : {}),
-        description,
-    };
+function readSchemaMeta(schema: z.ZodType): SchemaMeta {
+    return schema.meta() ?? {};
 }
 
 function escapeForJsDoc(text: string): string {
@@ -252,7 +244,7 @@ function escapeForJsDoc(text: string): string {
 /**
  * Builds a JSDoc comment block from schema metadata.
  */
-function buildJsDoc(schema: z.ZodTypeAny): string {
+function buildJsDoc(schema: z.ZodType): string {
     const meta = readSchemaMeta(schema);
     const lines: string[] = [];
 
@@ -325,21 +317,19 @@ function parseTypeNodeFromString(
     return stmt.type;
 }
 
-function isProbablyZodCustom(schema: z.ZodTypeAny): boolean {
-    const def = schema.def;
-    return schema instanceof z.ZodCustom || def.type === "custom";
+function isProbablyZodCustom(schema: z.ZodType): boolean {
+    return schema instanceof z.ZodCustom || schema.def.type === "custom";
 }
 
-function getCustomPredicate(
-    schema: z.ZodTypeAny,
-): ((v: unknown) => unknown) | null {
-    // biome-ignore lint/suspicious/noExplicitAny: Need to try various locations where Zod stores metadata
-    const def: any = schema.def;
-    const candidate = def?.fn ?? def?.check ?? def?.predicate ?? null;
-    return typeof candidate === "function" ? candidate : null;
+function getCustomPredicate(schema: z.ZodType): Predicate | null {
+    const def = getZodDef(schema);
+    const candidate = def.fn ?? def.check ?? def.predicate ?? null;
+    return isFunction(candidate) ? candidate : null;
 }
 
-function sampleValueForCtor(ctor: unknown): unknown | null {
+function sampleValueForCtor(
+    ctor: unknown,
+): Uint8Array | ArrayBuffer | Date | null {
     if (ctor === Uint8Array) return new Uint8Array();
     if (ctor === ArrayBuffer) return new ArrayBuffer(0);
     if (ctor === Date) return new Date(0);
@@ -347,17 +337,20 @@ function sampleValueForCtor(ctor: unknown): unknown | null {
 }
 
 function matchesInstanceofViaDefChecks(
-    schema: z.ZodTypeAny,
+    schema: z.ZodType,
     ctor: unknown,
 ): boolean {
-    const def = getZodDef(schema);
-    const checks = def?.checks;
-    if (!Array.isArray(checks)) return false;
+    const checks = getZodDef(schema).checks;
+    if (!checks) return false;
 
     for (const check of checks) {
-        const kind = check?.kind ?? check?.type ?? check?.check;
+        if (!isRecord(check)) continue;
+        const kind = check["kind"] ?? check["type"] ?? check["check"];
         const cls =
-            check?.cls ?? check?.class ?? check?.ctor ?? check?.instanceof;
+            check["cls"] ??
+            check["class"] ??
+            check["ctor"] ??
+            check["instanceof"];
         if (kind === "instanceof" && cls === ctor) return true;
     }
     return false;
@@ -365,24 +358,26 @@ function matchesInstanceofViaDefChecks(
 
 /**
  * Attempts to detect z.instanceof by checking cls property or fn behavior.
- * Returns the constructor if detected, null otherwise.
+ * Returns the constructor if detected, undefined otherwise.
  */
-function detectInstanceofClass(schema: z.ZodTypeAny): unknown | null {
+function detectInstanceofClass(schema: z.ZodType): AnyConstructor | undefined {
     const def = getZodDef(schema);
-    if (!def) return null;
 
     // Check cls property (Zod v4 may store class reference here)
-    const cls = def.cls;
-    if (cls && typeof cls === "function") {
-        return cls;
+    if (isFunction(def.cls)) {
+        return def.cls;
     }
 
     // Check predicate function for instanceof check
     const pred = getCustomPredicate(schema);
-    if (!pred) return null;
+    if (!pred) return undefined;
 
     // Test known constructors
-    const knownCtors = [Uint8Array, ArrayBuffer, Date];
+    const knownCtors: readonly AnyConstructor[] = [
+        Uint8Array,
+        ArrayBuffer,
+        Date,
+    ];
     for (const ctor of knownCtors) {
         const sample = sampleValueForCtor(ctor);
         if (sample === null) continue;
@@ -397,9 +392,8 @@ function detectInstanceofClass(schema: z.ZodTypeAny): unknown | null {
     }
 
     // Check fn.toString() as last resort
-    const fn = def.fn;
-    if (typeof fn === "function") {
-        const fnStr = fn.toString();
+    if (typeof def.fn === "function") {
+        const fnStr = def.fn.toString();
         for (const ctor of knownCtors) {
             if (fnStr.includes(ctor.name) || fnStr.includes("instanceof")) {
                 return ctor;
@@ -407,7 +401,7 @@ function detectInstanceofClass(schema: z.ZodTypeAny): unknown | null {
         }
     }
 
-    return null;
+    return undefined;
 }
 
 /**
@@ -417,7 +411,7 @@ function detectInstanceofClass(schema: z.ZodTypeAny): unknown | null {
  * - Returns null if unknown (caller should throw for error-intolerant behavior).
  */
 function getCustomOverrideTypeNode(
-    schema: z.ZodTypeAny,
+    schema: z.ZodType,
     context: string,
 ): ts.TypeNode | null {
     const meta = readSchemaMeta(schema);
@@ -487,9 +481,9 @@ function getCustomOverrideTypeNode(
 // Format-based Schema Handling (z.url(), z.int(), etc.)
 // =============================================================================
 
-function getFormatBasedType(schema: ZodType): ts.TypeNode | null {
-    const def = getZodDef(schema);
-    if (!def?.format) return null;
+function getFormatBasedType(schema: z.ZodType): ts.TypeNode | null {
+    const format = getZodDef(schema).format;
+    if (!format) return null;
 
     // String-based formats
     if (schema instanceof z.ZodString) {
@@ -511,7 +505,7 @@ function getFormatBasedType(schema: ZodType): ts.TypeNode | null {
             "nanoid",
             "jwt",
         ];
-        if (stringFormats.includes(def.format)) {
+        if (stringFormats.includes(format)) {
             return ts.factory.createKeywordTypeNode(
                 ts.SyntaxKind.StringKeyword,
             );
@@ -527,7 +521,7 @@ function getFormatBasedType(schema: ZodType): ts.TypeNode | null {
             "float32",
             "float64",
         ];
-        if (numberFormats.includes(def.format)) {
+        if (numberFormats.includes(format)) {
             return ts.factory.createKeywordTypeNode(
                 ts.SyntaxKind.NumberKeyword,
             );
@@ -546,33 +540,24 @@ function getFormatBasedType(schema: ZodType): ts.TypeNode | null {
  */
 function collectAllSchemasFromModuleExports(
     moduleExports: Record<string, unknown>,
-): Set<z.ZodTypeAny> {
-    const found = new Set<z.ZodTypeAny>();
+): Set<z.ZodType> {
+    const found = new Set<z.ZodType>();
     const visitedObjects = new WeakSet<object>();
 
     const walk = (value: unknown): void => {
-        if (value instanceof ZodType) {
-            const schema = value satisfies z.ZodType;
-            if (found.has(schema)) return;
-            found.add(schema);
+        if (value instanceof z.ZodType) {
+            if (found.has(value)) return;
+            found.add(value);
 
-            const def = schema?.def;
-            if (def && typeof def === "object") walk(def);
+            walk(value.def);
 
-            // Handle ZodObject shape
-            try {
-                // biome-ignore lint/suspicious/noExplicitAny: If it's not ZodObject, shape will be undefined so its ok
-                const shape = (def as any)?.shape;
-                if (typeof shape === "function" && shape.length === 0) {
-                    const s = shape();
-                    if (s && typeof s === "object") walk(s);
-                } else if (shape && typeof shape === "object") {
-                    walk(shape);
-                }
-            } catch {
-                // Shape access failed, continue
+            // Handle ZodObject shape. Other schemas have no shape.
+            const shape = getZodDef(value).shape;
+            if (typeof shape === "function") {
+                if (shape.length === 0) walk(shape());
+            } else if (shape) {
+                walk(shape);
             }
-
             return;
         }
 
@@ -581,11 +566,11 @@ function collectAllSchemasFromModuleExports(
             return;
         }
 
-        if (value && typeof value === "object") {
-            if (visitedObjects.has(value as object)) return;
-            visitedObjects.add(value as object);
+        if (isRecord(value)) {
+            if (visitedObjects.has(value)) return;
+            visitedObjects.add(value);
 
-            for (const v of Object.values(value as Record<string, unknown>)) {
+            for (const v of Object.values(value)) {
                 if (typeof v === "function") continue;
                 walk(v);
             }
@@ -601,7 +586,7 @@ function collectAllSchemasFromModuleExports(
  * Throws error for unknown custom schemas (error-intolerant behavior).
  */
 function buildOverridesOrThrow(
-    allSchemas: Set<z.ZodTypeAny>,
+    allSchemas: Set<z.ZodType>,
     context: string,
 ): TypeOverrideMap {
     const overrides: TypeOverrideMap = new Map();
@@ -613,7 +598,12 @@ function buildOverridesOrThrow(
         // Handle format-based schemas (z.url(), z.int(), etc.)
         const formatType = getFormatBasedType(schema);
         if (formatType) {
-            overrides.set(schema, () => formatType);
+            // A new node for every use: nodes get documented in place
+            overrides.set(schema, () => {
+                const fresh = getFormatBasedType(schema);
+                invariant(fresh, "unreachable: the format type disappeared");
+                return fresh;
+            });
             continue;
         }
 
@@ -621,7 +611,11 @@ function buildOverridesOrThrow(
         if (isProbablyZodCustom(schema)) {
             const override = getCustomOverrideTypeNode(schema, context);
             if (override) {
-                overrides.set(schema, () => override);
+                overrides.set(schema, () => {
+                    const fresh = getCustomOverrideTypeNode(schema, context);
+                    invariant(fresh, "unreachable: the override disappeared");
+                    return fresh;
+                });
                 continue;
             }
 
@@ -654,7 +648,7 @@ function buildOverridesOrThrow(
                     `This script requires either:\n` +
                     `- a known safe type (e.g. z.instanceof(Uint8Array)), or\n` +
                     `- an explicit override via .meta({ tsType: "..." }).\n` +
-                    `Current meta.tsType: ${typeof meta.tsType === "string" ? JSON.stringify(meta.tsType) : String(meta.tsType)}\n` +
+                    `Current meta.tsType: ${typeof meta.tsType === "string" ? JSON.stringify(meta.tsType) : "(none)"}\n` +
                     `Fix: add .meta({ tsType: "Uint8Array" }) (or the appropriate TS type).`,
             );
         }
@@ -681,17 +675,15 @@ function extractSchemasOrThrow(
         if (!exportName.endsWith(SCHEMA_EXPORT_SUFFIX)) continue;
 
         invariant(
-            value instanceof ZodType,
+            value instanceof z.ZodType,
             `In ${fileContext}: export "${exportName}" ends with "${SCHEMA_EXPORT_SUFFIX}" ` +
                 `but is not a Zod schema. Fix the export or rename it.`,
         );
 
-        const typeName = deriveTypeName(exportName);
-
         entries.push({
-            typeName,
+            typeName: deriveTypeName(exportName),
             exportName,
-            schema: value as z.ZodTypeAny,
+            schema: value,
         });
     }
 
@@ -713,75 +705,458 @@ function extractSchemasOrThrow(
 }
 
 // =============================================================================
-// Property JSDoc Extraction
+// Intermediate Declarations (vite-plugin-dts output)
 // =============================================================================
 
+function hasExportModifier(stmt: ts.Statement): boolean {
+    return (
+        ts.canHaveModifiers(stmt) &&
+        (ts.getModifiers(stmt) ?? []).some(
+            (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+        )
+    );
+}
+
 /**
- * Extracts JSDoc descriptions for object properties.
+ * Parses an intermediate declaration file of a schema module into its exports.
+ * Only the shapes emitted for schema modules are supported; anything else throws.
  */
-function extractPropertyDocs(schema: ZodType): ReadonlyMap<string, string> {
-    const docs = new Map<string, string>();
-    const def = getZodDef(schema);
-    if (!def?.shape) return docs;
+function readPluginDeclarations(
+    dtsPath: string,
+    content: string,
+): Map<string, PluginDeclaration> {
+    const source = ts.createSourceFile(
+        dtsPath,
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+    );
+    const declarations = new Map<string, PluginDeclaration>();
 
-    const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+    const add = (name: string, declaration: PluginDeclaration): void => {
+        invariant(
+            !declarations.has(name),
+            `[${dtsPath}] "${name}" is declared more than once (overloads are unsupported).`,
+        );
+        declarations.set(name, declaration);
+    };
 
-    for (const [key, fieldSchema] of Object.entries(shape)) {
-        if (!isZodType(fieldSchema)) continue;
+    for (const stmt of source.statements) {
+        if (ts.isImportDeclaration(stmt)) {
+            invariant(
+                ts.isStringLiteral(stmt.moduleSpecifier) &&
+                    stmt.moduleSpecifier.text === "zod",
+                `[${dtsPath}] Unsupported import: ${stmt.getText(source)}. ` +
+                    `Schema modules may only import from "zod".`,
+            );
+            continue;
+        }
 
-        const meta = readSchemaMeta(fieldSchema as z.ZodTypeAny);
-        if (typeof meta.description === "string" && meta.description.trim()) {
-            docs.set(key, meta.description.trim());
+        invariant(
+            hasExportModifier(stmt),
+            `[${dtsPath}] Unsupported non-exported statement: ${stmt.getText(source)}`,
+        );
+
+        if (ts.isVariableStatement(stmt)) {
+            const [decl, ...rest] = stmt.declarationList.declarations;
+            invariant(
+                decl && rest.length === 0 && ts.isIdentifier(decl.name),
+                `[${dtsPath}] Unsupported variable statement: ${stmt.getText(source)}`,
+            );
+            invariant(
+                decl.type,
+                `[${dtsPath}] "${decl.name.text}" has no type annotation.`,
+            );
+            add(decl.name.text, {
+                kind: "value",
+                typeText: decl.type.getText(source),
+                text: stmt.getFullText(source).trim(),
+            });
+        } else if (ts.isFunctionDeclaration(stmt)) {
+            invariant(
+                stmt.name,
+                `[${dtsPath}] Anonymous function declaration is unsupported.`,
+            );
+            add(stmt.name.text, {
+                kind: "value",
+                typeText: undefined,
+                text: stmt.getFullText(source).trim(),
+            });
+        } else if (
+            ts.isTypeAliasDeclaration(stmt) ||
+            ts.isInterfaceDeclaration(stmt)
+        ) {
+            add(stmt.name.text, {
+                kind: "type",
+                typeText: undefined,
+                text: stmt.getFullText(source).trim(),
+            });
+        } else {
+            throw new Error(
+                `[${dtsPath}] Unsupported exported statement: ${stmt.getText(source)}`,
+            );
         }
     }
 
-    return docs;
-}
-
-function escapeRegExp(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return declarations;
 }
 
 /**
- * Adds JSDoc comments to TypeScript type properties.
- * Only adds if the property doesn't already have a JSDoc comment.
+ * Maps a path inside the declaration cache to its place in `dist`.
+ * `types/v0/X.d.ts` (cache) becomes `v0/X.d.ts`.
  */
-function addPropertyJsDocs(
-    typeString: string,
-    propertyDocs: ReadonlyMap<string, string>,
+function cachePathToDistPath(cachePath: string): string {
+    const rel = path.relative(DTS_CACHE_DIR, cachePath);
+    const parts = toPosix(rel).split("/");
+    if (parts[0] === "types") parts.shift();
+    return path.join(DIST_DIR, ...parts);
+}
+
+/**
+ * Rewrites the relative module specifiers of an intermediate declaration file
+ * so they point to the matching files in `dist`, with explicit `.js` extensions.
+ */
+function rewriteRelativeSpecifiers(
+    content: string,
+    cacheFilePath: string,
 ): string {
-    if (propertyDocs.size === 0) return typeString;
+    const source = ts.createSourceFile(
+        cacheFilePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+    );
+    const distFilePath = cachePathToDistPath(cacheFilePath);
 
-    let result = typeString;
+    const replacements: Array<{ start: number; end: number; text: string }> =
+        [];
 
-    for (const [propName, description] of propertyDocs) {
-        // Match property that is NOT preceded by a JSDoc comment
-        // This regex looks for property declarations that don't have /** ... */ right before them
-        const propRegex = new RegExp(
-            `(\\n)(\\s*)(${escapeRegExp(propName)}\\??\\s*:)`,
-            "g",
+    for (const stmt of source.statements) {
+        if (!ts.isImportDeclaration(stmt) && !ts.isExportDeclaration(stmt)) {
+            continue;
+        }
+        const specifier = stmt.moduleSpecifier;
+        if (!specifier || !ts.isStringLiteral(specifier)) continue;
+        if (!specifier.text.startsWith(".")) continue;
+
+        const base = path.resolve(path.dirname(cacheFilePath), specifier.text);
+        const target = existsSync(`${base}.d.ts`)
+            ? `${base}.d.ts`
+            : path.join(base, "index.d.ts");
+        invariant(
+            existsSync(target),
+            `[${cacheFilePath}] Cannot resolve "${specifier.text}".`,
         );
 
-        const jsDoc = `/** ${escapeForJsDoc(description)} */`;
+        let rel = toPosix(
+            path.relative(
+                path.dirname(distFilePath),
+                cachePathToDistPath(target),
+            ),
+        ).replace(/\.d\.ts$/, ".js");
+        if (!rel.startsWith(".")) rel = `./${rel}`;
 
-        // Replace only if no JSDoc already exists before the property
-        result = result.replace(propRegex, (match, newline, indent, prop) => {
-            // Check if the previous line already contains a JSDoc
-            const currentIndex = result.lastIndexOf(match);
-            const beforeMatch = result.substring(0, currentIndex);
-            const lastNewline = beforeMatch.lastIndexOf("\n");
-            const prevLine = beforeMatch.substring(lastNewline + 1);
-
-            // If previous line ends with */ it already has JSDoc
-            if (prevLine.trim().endsWith("*/")) {
-                return match; // Don't add duplicate
-            }
-
-            return `${newline}${indent}${jsDoc}${newline}${indent}${prop}`;
+        replacements.push({
+            start: specifier.getStart(source),
+            end: specifier.getEnd(),
+            text: JSON.stringify(rel),
         });
     }
 
+    let result = content;
+    for (const r of replacements.sort((a, b) => b.start - a.start)) {
+        result = result.slice(0, r.start) + r.text + result.slice(r.end);
+    }
     return result;
+}
+
+// =============================================================================
+// JSDoc of Nested Types
+// =============================================================================
+
+/**
+ * Every description of a schema is documented where its value shows up in the type:
+ * - the field of an object: JSDoc on the property
+ * - the option of a union (or intersection): JSDoc before the option
+ * - the item of an array: JSDoc before the item type, in parentheses
+ * - the root of a schema: JSDoc on the type and on the schema
+ * The same places `z.toJSONSchema()` puts a `description`, in the same order.
+ * `tests/built-output.test.ts` compares both.
+ */
+
+/** Schemas which describe the very same value as the schema they wrap. */
+const DESCRIBING_WRAPPERS: readonly string[] = [
+    "optional",
+    "nullable",
+    "default",
+    "prefault",
+    "catch",
+];
+
+/** Schemas whose type has no nested type, so there is nothing to document inside. */
+const LEAF_SCHEMA_TYPES: readonly string[] = [
+    "string",
+    "number",
+    "boolean",
+    "bigint",
+    "date",
+    "literal",
+    "enum",
+    "custom",
+    "null",
+    "undefined",
+    "any",
+    "unknown",
+    "never",
+];
+
+function isZodType(value: unknown): value is z.ZodType {
+    return value instanceof z.ZodType;
+}
+
+/**
+ * The description of the value a schema validates: its own, otherwise the one of
+ * the schema it wraps (`.optional()`, `.default()`...). Like `z.toJSONSchema()`.
+ */
+function describedBy(schema: z.ZodType): string | undefined {
+    const description = readSchemaMeta(schema).description;
+    if (typeof description === "string" && description.trim()) {
+        return description.trim();
+    }
+    const def = getZodDef(schema);
+    if (
+        def.type !== undefined &&
+        DESCRIBING_WRAPPERS.includes(def.type) &&
+        isZodType(def.innerType)
+    ) {
+        return describedBy(def.innerType);
+    }
+    return undefined;
+}
+
+/** @param ownLine Whether the comment is on its own line, as for a property. */
+function addJsDoc<T extends ts.Node>(
+    node: T,
+    description: string,
+    ownLine: boolean,
+): T {
+    ts.addSyntheticLeadingComment(
+        node,
+        ts.SyntaxKind.MultiLineCommentTrivia,
+        `* ${escapeForJsDoc(description)} `,
+        ownLine,
+    );
+    return node;
+}
+
+function unparenthesize(node: ts.TypeNode): ts.TypeNode {
+    return ts.isParenthesizedTypeNode(node) ? unparenthesize(node.type) : node;
+}
+
+function needsParentheses(node: ts.TypeNode): boolean {
+    return (
+        ts.isUnionTypeNode(node) ||
+        ts.isIntersectionTypeNode(node) ||
+        ts.isFunctionTypeNode(node)
+    );
+}
+
+/** Documents the member of a union or an intersection. */
+function documentMember(
+    node: ts.TypeNode,
+    description: string | undefined,
+): ts.TypeNode {
+    if (!description) return node;
+    const wrapped = needsParentheses(node)
+        ? ts.factory.createParenthesizedType(node)
+        : node;
+    return addJsDoc(wrapped, description, false);
+}
+
+/** Documents the item type of an array. Always in parentheses, to tell it from the array. */
+function documentItem(
+    node: ts.TypeNode,
+    description: string | undefined,
+): ts.TypeNode {
+    if (!description) return node;
+    return ts.factory.createParenthesizedType(
+        documentMember(node, description),
+    );
+}
+
+/**
+ * Documents the members of a union or an intersection.
+ * @param schemas The schemas the members were generated from, in order.
+ */
+function documentMembers(
+    schemas: readonly unknown[] | undefined,
+    nodes: ts.NodeArray<ts.TypeNode>,
+    overrides: TypeOverrideMap,
+): ts.NodeArray<ts.TypeNode> {
+    invariant(
+        schemas?.length === nodes.length,
+        "The members of a type do not match its schemas.",
+    );
+    return ts.factory.createNodeArray(
+        nodes.map((member, i) => {
+            const schema = schemas[i];
+            invariant(isZodType(schema), "A member is not a schema.");
+            return documentMember(
+                documentType(schema, unparenthesize(member), overrides),
+                describedBy(schema),
+            );
+        }),
+    );
+}
+
+/**
+ * Documents the nested types of a type generated by zod-to-ts, which only
+ * documents the fields of objects. See "JSDoc of Nested Types".
+ * @param schema The schema the node was generated from.
+ * @param node The node zod-to-ts generated for `schema`.
+ * @param overrides The overrides given to zod-to-ts: their nodes are left as is.
+ * @returns The documented node, which replaces `node`.
+ */
+function documentType(
+    schema: z.ZodType,
+    node: ts.TypeNode,
+    overrides: TypeOverrideMap,
+): ts.TypeNode {
+    if (overrides.has(schema)) return node;
+
+    const def = getZodDef(schema);
+    const kind = def.type;
+    invariant(kind !== undefined, "A schema has no type.");
+
+    if (LEAF_SCHEMA_TYPES.includes(kind)) return node;
+
+    switch (kind) {
+        case "object": {
+            invariant(
+                !def.catchall,
+                "An object with a catchall cannot be documented.",
+            );
+            invariant(
+                ts.isTypeLiteralNode(node),
+                `An object schema generated ${ts.SyntaxKind[node.kind]}, not a type literal.`,
+            );
+            const shape =
+                typeof def.shape === "function" ? def.shape() : def.shape;
+            const fields = Object.entries(shape ?? {});
+            invariant(
+                fields.length === node.members.length,
+                "The fields of an object do not match its type literal.",
+            );
+
+            const members = node.members.map((member, i) => {
+                const field = fields[i];
+                invariant(
+                    field &&
+                        isZodType(field[1]) &&
+                        ts.isPropertySignature(member) &&
+                        member.type &&
+                        (ts.isIdentifier(member.name) ||
+                            ts.isStringLiteral(member.name)) &&
+                        member.name.text === field[0],
+                    `Property ${i} does not match field ${field?.[0]}.`,
+                );
+                const updated = ts.factory.updatePropertySignature(
+                    member,
+                    member.modifiers,
+                    member.name,
+                    member.questionToken,
+                    documentType(field[1], member.type, overrides),
+                );
+                // Own documentation: the one of zod-to-ts is replaced
+                ts.setSyntheticLeadingComments(updated, undefined);
+                const description = describedBy(field[1]);
+                return description
+                    ? addJsDoc(updated, description, true)
+                    : updated;
+            });
+            return ts.factory.updateTypeLiteralNode(
+                node,
+                ts.factory.createNodeArray(members),
+            );
+        }
+
+        case "array": {
+            invariant(
+                ts.isArrayTypeNode(node) && isZodType(def.element),
+                "An array schema did not generate an array type.",
+            );
+            const item = documentType(
+                def.element,
+                unparenthesize(node.elementType),
+                overrides,
+            );
+            return ts.factory.updateArrayTypeNode(
+                node,
+                documentItem(item, describedBy(def.element)),
+            );
+        }
+
+        case "union": {
+            invariant(
+                ts.isUnionTypeNode(node),
+                "A union schema did not generate a union type.",
+            );
+            return ts.factory.updateUnionTypeNode(
+                node,
+                documentMembers(def.options, node.types, overrides),
+            );
+        }
+
+        case "intersection": {
+            invariant(
+                ts.isIntersectionTypeNode(node),
+                "An intersection schema did not generate an intersection type.",
+            );
+            return ts.factory.updateIntersectionTypeNode(
+                node,
+                documentMembers([def.left, def.right], node.types, overrides),
+            );
+        }
+
+        case "optional":
+        case "nullable": {
+            // `T | undefined` and `T | null`: only T has nested types
+            invariant(
+                ts.isUnionTypeNode(node) &&
+                    node.types.length === 2 &&
+                    isZodType(def.innerType),
+                `A ${kind} schema did not generate a union of two types.`,
+            );
+            const [inner, extra] = node.types;
+            invariant(inner && extra, "unreachable: no union members");
+            return ts.factory.updateUnionTypeNode(
+                node,
+                ts.factory.createNodeArray([
+                    documentType(
+                        def.innerType,
+                        unparenthesize(inner),
+                        overrides,
+                    ),
+                    extra,
+                ]),
+            );
+        }
+
+        case "default":
+        case "prefault":
+        case "catch": {
+            invariant(isZodType(def.innerType), "A wrapper wraps no schema.");
+            return documentType(def.innerType, node, overrides);
+        }
+
+        default:
+            throw new Error(
+                `Cannot document the nested types of a "${kind}" schema. ` +
+                    `Support it in documentType() of scripts/generate-types.ts.`,
+            );
+    }
 }
 
 // =============================================================================
@@ -789,83 +1164,93 @@ function addPropertyJsDocs(
 // =============================================================================
 
 /**
- * Generates TypeScript declarations for a module.
+ * Generates TypeScript declarations for a schema module.
+ * @param entries The schema exports of the module.
+ * @param runtimeExportNames Every runtime export of the module.
+ * @param overrides zod-to-ts type overrides for the module's schemas.
+ * @param pluginDeclarations The intermediate declarations of the module.
+ * @param context Used in error messages.
  */
 function generateTypesForModule(
     entries: SchemaEntry[],
+    runtimeExportNames: readonly string[],
     overrides: TypeOverrideMap,
-    existingDtsContent?: string,
+    pluginDeclarations: ReadonlyMap<string, PluginDeclaration>,
+    context: string,
 ): string {
     const out: string[] = [
         "// Auto-generated TypeScript declarations from Zod schemas. DO NOT EDIT.",
         "// Regenerate with: pnpm generate-types",
         "",
-        'import { z, type ZodType } from "zod";',
+        'import * as z from "zod";',
         "",
     ];
 
     const auxiliaryTypeStore = createAuxiliaryTypeStore();
+    const declaredNames = new Set<string>();
+    const generatedTypeNames = new Set(entries.map((e) => e.typeName));
 
     for (const { typeName, exportName, schema } of entries) {
         const jsdoc = buildJsDoc(schema);
 
-        // Generate the type alias
+        // The plain type, with JSDoc on every property (zod-to-ts reads `.meta()`)
         const { node } = zodToTs(schema, { auxiliaryTypeStore, overrides });
-        const typeAliasDecl = createTypeAlias(node, typeName);
-        let typeString = printNode(typeAliasDecl);
+        const documented = documentType(schema, node, overrides);
+        const typeString = printNode(createTypeAlias(documented, typeName));
 
-        // Add property-level JSDoc comments
-        const propertyDocs = extractPropertyDocs(schema);
-        typeString = addPropertyJsDocs(typeString, propertyDocs);
-
-        // Export the type with JSDoc
         if (jsdoc) out.push(jsdoc.trimEnd());
         out.push(`export ${typeString}`);
         out.push("");
 
-        // Declare the schema const with JSDoc
+        // The schema itself, typed by the precise declaration emitted by tsc
+        const declaration = pluginDeclarations.get(exportName);
+        invariant(
+            declaration?.kind === "value" && declaration.typeText,
+            `[${context}] "${exportName}" has no declaration in the intermediate .d.ts.`,
+        );
         if (jsdoc) out.push(jsdoc.trimEnd());
-
-        let schemaType = `ZodType<${typeName}>`;
-
-        if (existingDtsContent) {
-            // Try to extract transparent type from existing .d.ts
-            // Look for: export declare const CharacterSchema: ...;
-            const escapedName = exportName.replace(
-                /[.*+?^${}()|[\]\\]/g,
-                "\\$&",
-            );
-
-            // Regex explanation:
-            // Match "export declare const Name:"
-            // Capture everything ([\s\S]+?)
-            // Until we see "\nexport " or End of File ($)
-            // This avoids stopping at semicolons inside the type definition
-            const regex = new RegExp(
-                `export declare const ${escapedName}: ([\\s\\S]+?)(?=\\nexport |$)`,
-            );
-
-            const match = existingDtsContent.match(regex);
-            if (match) {
-                let typeStr = match[1].trim();
-                // Remove trailing semicolon if present
-                if (typeStr.endsWith(";")) {
-                    typeStr = typeStr.slice(0, -1);
-                }
-                schemaType = typeStr;
-            }
-        }
-
-        out.push(`export declare const ${exportName}: ${schemaType};`);
+        out.push(
+            `export declare const ${exportName}: ${declaration.typeText};`,
+        );
         out.push("");
+
+        declaredNames.add(exportName);
+    }
+
+    // Every other export is declared exactly as tsc emitted it
+    for (const [name, declaration] of pluginDeclarations) {
+        if (declaration.kind === "type") {
+            invariant(
+                generatedTypeNames.has(name),
+                `[${context}] Type "${name}" is exported but no "${name}${SCHEMA_EXPORT_SUFFIX}" ` +
+                    `schema generates it. Export a schema for it, or do not export the type.`,
+            );
+            continue;
+        }
+        if (declaredNames.has(name)) continue;
+        invariant(
+            !name.endsWith(SCHEMA_EXPORT_SUFFIX),
+            `[${context}] "${name}" ends with "${SCHEMA_EXPORT_SUFFIX}" but is not a schema.`,
+        );
+        out.push(declaration.text);
+        out.push("");
+        declaredNames.add(name);
+    }
+
+    // Nothing the runtime exports may be left without a declaration
+    for (const name of runtimeExportNames) {
+        invariant(
+            declaredNames.has(name),
+            `[${context}] Runtime export "${name}" has no declaration.`,
+        );
     }
 
     // Emit auxiliary type definitions (deterministic order)
-    const aux = [...auxiliaryTypeStore.definitions.entries()].sort((a, b) =>
-        String(a[0]).localeCompare(String(b[0])),
+    const aux = [...auxiliaryTypeStore.definitions.values()].sort((a, b) =>
+        a.identifier.text.localeCompare(b.identifier.text),
     );
 
-    for (const [, def] of aux) {
+    for (const def of aux) {
         const defStr = printNode(def.node).trim();
         invariant(
             defStr.startsWith("type ") || defStr.startsWith("interface "),
@@ -874,92 +1259,190 @@ function generateTypesForModule(
         out.push(defStr);
         out.push("");
     }
+    if (aux.length > 0) {
+        // Keep the auxiliary types private
+        out.push("export {};");
+        out.push("");
+    }
 
     return `${out.join("\n").trimEnd()}\n`;
 }
 
 // =============================================================================
-// Barrel Export Generation
+// Entry Point & Barrel Generation
 // =============================================================================
 
-function generateDirectoryIndexDts(
-    dirModules: string[],
-    dirSubdirs: string[],
-): string {
-    const lines: string[] = ["// Auto-generated barrel export. DO NOT EDIT."];
-
-    for (const mod of dirModules) {
-        lines.push(`export * from "./${mod}";`);
-    }
-    for (const sub of dirSubdirs) {
-        lines.push(`export * from "./${sub}/index";`);
-    }
-
-    return `${lines.join("\n")}\n`;
-}
-
-function generateParentBarrelDts(folderName: string): string {
-    return `// Auto-generated barrel export. DO NOT EDIT.
-export * from "./${folderName}/index";
-`;
-}
-
 /**
- * Generates main index.d.ts with character version exports.
+ * Generates the entry declarations (`index.d.ts`), the counterpart of `src/index.ts`.
+ * `characterVersions` are the versions which have a `Character` schema.
  */
 function generateMainIndexDts(
     characterVersions: Array<{ version: number; versionDir: string }>,
 ): string {
     const lines: string[] = [
         "// Auto-generated entry declarations. DO NOT EDIT.",
-        'import type { ZodType } from "zod";',
+        "// Regenerate with: pnpm generate-types",
     ];
 
-    if (characterVersions.length === 0) {
-        lines.push("");
-        lines.push("// No CharacterSchema exports found.");
-        lines.push("export {};");
-        return `${lines.join("\n")}\n`;
-    }
+    invariant(
+        characterVersions.length > 0,
+        "No CharacterSchema export found: cannot generate the entry declarations.",
+    );
 
-    // Imports and re-exports
     for (const v of characterVersions) {
         const vTag = `V${v.version}`;
-        const rel = `./${v.versionDir}/Character/Character`;
+        const rel = JSON.stringify(`./${v.versionDir}/Character/Character.js`);
         lines.push(
-            `import type { Character as Character${vTag} } from ${JSON.stringify(rel)};`,
+            `import type { Character as Character${vTag} } from ${rel};`,
+            `import { CharacterSchema as Character${vTag}Schema } from ${rel};`,
+            `export { Character${vTag}Schema };`,
+            `export type { Character${vTag} };`,
+            "",
         );
-        lines.push(`export { Character${vTag} };`);
-        lines.push(
-            `export { CharacterSchema as Character${vTag}Schema } from ${JSON.stringify(rel)};`,
-        );
-        lines.push("");
     }
 
-    // characterMap declaration
-    lines.push("export declare const characterMap: {");
+    lines.push(
+        "/**",
+        " * Version-schema pair of character specification",
+        " */",
+        "export declare const characterMap: {",
+    );
     for (const v of characterVersions) {
-        const vTag = `V${v.version}`;
-        lines.push(`  readonly ${v.version}: ZodType<Character${vTag}>;`);
-    }
-    lines.push("};");
-    lines.push("");
-
-    // CharacterMap type
-    lines.push("export type CharacterMap = {");
-    for (const v of characterVersions) {
-        const vTag = `V${v.version}`;
         lines.push(
-            `  readonly ${JSON.stringify(String(v.version))}: Character${vTag};`,
+            `    readonly ${v.version}: typeof CharacterV${v.version}Schema;`,
         );
     }
-    lines.push("};");
-    lines.push("");
+    lines.push("};", "");
 
-    lines.push("export default characterMap;");
-    lines.push("");
+    lines.push(
+        "/**",
+        " * Version-type pair of character specification",
+        " */",
+        "export type CharacterMap = {",
+    );
+    for (const v of characterVersions) {
+        lines.push(
+            `    ${JSON.stringify(String(v.version))}: CharacterV${v.version};`,
+        );
+    }
+    lines.push("};", "");
+
+    const latest = characterVersions[characterVersions.length - 1];
+    invariant(latest, "unreachable: no character version");
+    lines.push(
+        "/**",
+        " * Latest character specification",
+        " */",
+        `declare const _default: typeof CharacterV${latest.version}Schema;`,
+        "export default _default;",
+        "",
+    );
 
     return lines.join("\n");
+}
+
+/**
+ * Copies a plain intermediate declaration file (a top-level module)
+ * into `dist`, with its specifiers rewritten.
+ * @returns The path of the written file, relative to `dist`.
+ */
+async function copyPluginDeclarationFile(
+    cacheFilePath: string,
+): Promise<string> {
+    const content = await fs.readFile(cacheFilePath, "utf8");
+    const rewritten = rewriteRelativeSpecifiers(content, cacheFilePath).replace(
+        /\r?\n\/\/# sourceMappingURL=.*$/,
+        "",
+    );
+    const distFilePath = cachePathToDistPath(cacheFilePath);
+    await writeFileEnsuringDir(
+        distFilePath,
+        `// Auto-generated from src. DO NOT EDIT.\n${rewritten.trimEnd()}\n`,
+    );
+    return toPosix(path.relative(DIST_DIR, distFilePath));
+}
+
+/**
+ * The schema modules a barrel re-exports, folder barrels (`index.d.ts`) expanded.
+ * Only `export * from "./relative"` is supported in a barrel.
+ * @returns The intermediate declaration files of the schema modules.
+ */
+function resolveBarrelModules(barrelPath: string): string[] {
+    const source = ts.createSourceFile(
+        barrelPath,
+        readFileSync(barrelPath, "utf8"),
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+    );
+    const modules: string[] = [];
+
+    for (const stmt of source.statements) {
+        const specifier = ts.isExportDeclaration(stmt)
+            ? stmt.moduleSpecifier
+            : undefined;
+        invariant(
+            ts.isExportDeclaration(stmt) &&
+                !stmt.exportClause &&
+                !stmt.isTypeOnly &&
+                specifier &&
+                ts.isStringLiteral(specifier) &&
+                specifier.text.startsWith("."),
+            `[${barrelPath}] Unsupported barrel statement: ${stmt.getText(source)}. ` +
+                `Barrels may only contain \`export * from "./relative"\`.`,
+        );
+
+        const base = path.resolve(path.dirname(barrelPath), specifier.text);
+        if (existsSync(`${base}.d.ts`)) {
+            modules.push(`${base}.d.ts`);
+        } else {
+            const nested = path.join(base, "index.d.ts");
+            invariant(
+                existsSync(nested),
+                `[${barrelPath}] Cannot resolve "${specifier.text}".`,
+            );
+            modules.push(...resolveBarrelModules(nested));
+        }
+    }
+
+    return modules;
+}
+
+/**
+ * Writes the declarations of the barrel of a spec version, `v0/index.ts` for
+ * `v0.d.ts`. The folder barrels have no runtime counterpart (they are not
+ * built), so the file re-exports the schema modules directly.
+ * @param barrelPath The intermediate declaration of the barrel, e.g. `.../types/v0/index.d.ts`.
+ * @returns The path of the written file, relative to `dist`.
+ */
+async function writeVersionBarrel(barrelPath: string): Promise<string> {
+    const outPath = path.join(
+        DIST_DIR,
+        `${path.relative(DTS_CACHE_TYPES_DIR, path.dirname(barrelPath))}.d.ts`,
+    );
+    const lines = resolveBarrelModules(barrelPath).map((module) => {
+        const target = cachePathToDistPath(module);
+        invariant(
+            existsSync(target),
+            `Barrel target is not generated: ${target}`,
+        );
+        let rel = toPosix(path.relative(path.dirname(outPath), target)).replace(
+            /\.d\.ts$/,
+            ".js",
+        );
+        if (!rel.startsWith(".")) rel = `./${rel}`;
+        return `export * from ${JSON.stringify(rel)};`;
+    });
+    invariant(
+        new Set(lines).size === lines.length,
+        `[${barrelPath}] A schema module is re-exported twice.`,
+    );
+
+    await writeFileEnsuringDir(
+        outPath,
+        `// Auto-generated barrel export. DO NOT EDIT.\n${lines.join("\n")}\n`,
+    );
+    return toPosix(path.relative(DIST_DIR, outPath));
 }
 
 // =============================================================================
@@ -967,11 +1450,15 @@ function generateMainIndexDts(
 // =============================================================================
 
 async function main(): Promise<void> {
-    console.log("🔍 Scanning source files...\n");
+    console.log("Scanning source files...\n");
 
     invariant(
         existsSync(SRC_DIR),
         `Source directory does not exist: ${SRC_DIR}`,
+    );
+    invariant(
+        existsSync(DTS_CACHE_TYPES_DIR),
+        `Intermediate declarations not found: ${DTS_CACHE_TYPES_DIR}. Run "vite build" first (pnpm build).`,
     );
 
     const sourceFiles = await glob("**/*.ts", {
@@ -982,23 +1469,7 @@ async function main(): Promise<void> {
 
     invariant(sourceFiles.length > 0, `No source files found in ${SRC_DIR}`);
 
-    console.log(`📁 Found ${sourceFiles.length} source file(s)\n`);
-
-    // Directory graph for barrel exports
-    const dirModules = new Map<string, Set<string>>();
-    const dirSubdirs = new Map<string, Set<string>>();
-
-    const ensureDirEntry = (dir: string) => {
-        if (!dirModules.has(dir)) dirModules.set(dir, new Set());
-        if (!dirSubdirs.has(dir)) dirSubdirs.set(dir, new Set());
-    };
-
-    const addDirEdge = (parent: string, childName: string) => {
-        ensureDirEntry(parent);
-        if (!dirSubdirs.get(parent)?.add(childName)) {
-            throw new Error(`No such directory: ${parent}`);
-        }
-    };
+    console.log(`Found ${sourceFiles.length} source file(s)\n`);
 
     // Character version collection
     const characterVersions: Array<{ version: number; versionDir: string }> =
@@ -1015,30 +1486,19 @@ async function main(): Promise<void> {
         const srcPath = path.join(SRC_DIR, relFs);
 
         const modulePosixPath = relPosix.replace(/\.ts$/, "");
-        const outPosixPath = `${modulePosixPath}.d.ts`;
-        const outFsPath = fsPathFromPosixRelative(DIST_DIR, outPosixPath);
+        const outFsPath = path.join(
+            DIST_DIR,
+            ...`${modulePosixPath}.d.ts`.split("/"),
+        );
+        const pluginDtsPath = path.join(
+            DTS_CACHE_TYPES_DIR,
+            ...`${modulePosixPath}.d.ts`.split("/"),
+        );
 
-        // Dynamic import the module
-        let moduleUrl = pathToFileURL(srcPath).href;
-        // Resolve path of tsconfig's
-        const tscPath = Object.entries(tsconfig.compilerOptions.paths);
-        tscPath.forEach(([key, value]) => {
-            if (moduleUrl.startsWith(key.replace("*", ""))) {
-                console.log(`Resolving paths: ${moduleUrl} -> ${value[0]}`);
-                moduleUrl = moduleUrl.replace(
-                    key.replace("*", ""),
-                    value[0].replace("*", ""),
-                );
-            }
-        });
-        console.log(`Resolved: ${moduleUrl}`);
-
-        let moduleExports: Record<string, unknown>;
+        // Import the module. Path aliases (`@/`) are resolved by tsx.
+        let moduleExports: unknown;
         try {
-            moduleExports = (await import(moduleUrl)) as Record<
-                string,
-                unknown
-            >;
+            moduleExports = await import(pathToFileURL(srcPath).href);
         } catch (e) {
             throw new TypeGenerationError(
                 `Failed to import module`,
@@ -1046,47 +1506,44 @@ async function main(): Promise<void> {
                 e,
             );
         }
+        invariant(
+            isRecord(moduleExports),
+            `[${relPosix}] The module namespace is not an object.`,
+        );
 
-        const fileContext = relPosix;
-        const entries = extractSchemasOrThrow(moduleExports, fileContext);
+        const entries = extractSchemasOrThrow(moduleExports, relPosix);
 
         if (entries.length === 0) {
-            console.log(`⏭️  Skipped (no schemas): ${relPosix}`);
-            continue;
+            throw new TypeGenerationError(
+                "The module exports no schema, so it cannot be declared. " +
+                    "Move it out of src/types, or export a schema.",
+                srcPath,
+            );
         }
 
         const allSchemas = collectAllSchemasFromModuleExports(moduleExports);
         const overrides = buildOverridesOrThrow(
             allSchemas,
-            `module ${fileContext}`,
+            `module ${relPosix}`,
         );
 
-        // Try to read existing d.ts file (generated by vite-plugin-dts)
-        let existingDtsContent: string | undefined;
-        try {
-            if (existsSync(outFsPath)) {
-                existingDtsContent = await fs.readFile(outFsPath, "utf8");
-            } else {
-                // Check dist/types/... (vite-plugin-dts default output structure)
-                // Inject 'types' into the path: .../dist/v0/... -> .../dist/types/v0/...
-                // Assuming DIST_DIR is used to construct outFsPath
-                const relativeToDist = path.relative(DIST_DIR, outFsPath);
-                const typesPath = path.join(DIST_DIR, "types", relativeToDist);
-
-                if (existsSync(typesPath)) {
-                    existingDtsContent = await fs.readFile(typesPath, "utf8");
-                }
-            }
-        } catch {
-            // ignore
-        }
+        invariant(
+            existsSync(pluginDtsPath),
+            `[${relPosix}] Intermediate declaration not found: ${pluginDtsPath}. Run "vite build" first.`,
+        );
+        const pluginDeclarations = readPluginDeclarations(
+            pluginDtsPath,
+            await fs.readFile(pluginDtsPath, "utf8"),
+        );
 
         let content: string;
         try {
             content = generateTypesForModule(
                 entries,
+                Object.keys(moduleExports),
                 overrides,
-                existingDtsContent,
+                pluginDeclarations,
+                relPosix,
             );
         } catch (e) {
             throw new TypeGenerationError(
@@ -1096,144 +1553,72 @@ async function main(): Promise<void> {
             );
         }
 
-        await fs.mkdir(path.dirname(outFsPath), { recursive: true });
-        await fs.writeFile(outFsPath, content, "utf8");
+        await writeFileEnsuringDir(outFsPath, content);
 
         console.log(
-            `✅ Generated: ${outPosixPath} (${entries.length} type(s))`,
+            `Generated: ${modulePosixPath}.d.ts (${entries.length} type(s))`,
         );
         generatedModules.push(modulePosixPath);
 
-        // Build directory graph
-        const dir = path.posix.dirname(modulePosixPath);
-        const base = path.posix.basename(modulePosixPath);
-
-        ensureDirEntry(dir);
-        if (!dirModules.get(dir)?.add(base)) {
-            throw new Error(`No such directory: ${dir}`);
-        }
-
-        // Parent directory relationship
-        if (dir !== ".") {
-            const parent = path.posix.dirname(dir);
-            const childName = path.posix.basename(dir);
-            addDirEdge(parent, childName);
-        }
-
         // Detect character versions
+        const characterModule = /^(v\d+)\/Character\/Character$/.exec(
+            modulePosixPath,
+        );
         if (
-            modulePosixPath.match(/^v\d+\/Character\/Character$/) &&
+            characterModule?.[1] &&
             entries.some((e) => e.exportName === "CharacterSchema")
         ) {
-            const vDir = modulePosixPath.split("/")[0];
-            const m = /^v(\d+)$/.exec(vDir);
-            if (m) {
-                characterVersions.push({
-                    version: Number(m[1]),
-                    versionDir: vDir,
-                });
-            }
+            characterVersions.push({
+                version: Number(characterModule[1].slice(1)),
+                versionDir: characterModule[1],
+            });
         }
     }
 
     console.log("");
 
-    // Generate index.d.ts for each directory
-    const allDirs = new Set<string>([
-        ...dirModules.keys(),
-        ...dirSubdirs.keys(),
-    ]);
-    const sortedDirs = [...allDirs].sort((a, b) => a.localeCompare(b));
-
-    for (const dir of sortedDirs) {
-        ensureDirEntry(dir);
-
-        // biome-ignore lint/style/noNonNullAssertion: All exists, since sortedDirs is just a sorted version of allDirs
-        const modules = [...dirModules.get(dir)!].sort((a, b) =>
-            a.localeCompare(b),
-        );
-        // biome-ignore lint/style/noNonNullAssertion: Same as modules'
-        const subs = [...dirSubdirs.get(dir)!].sort((a, b) =>
-            a.localeCompare(b),
-        );
-
-        if (modules.length === 0 && subs.length === 0) continue;
-
-        const indexPosix = path.posix.join(dir, "index.d.ts");
-        const indexFs = fsPathFromPosixRelative(DIST_DIR, indexPosix);
-
-        await fs.mkdir(path.dirname(indexFs), { recursive: true });
-        await fs.writeFile(
-            indexFs,
-            generateDirectoryIndexDts(modules, subs),
-            "utf8",
-        );
-
-        console.log(`📦 Generated barrel: ${indexPosix}`);
-
-        // Parent-level barrel
-        if (dir !== ".") {
-            const parent = path.posix.dirname(dir);
-            const folderName = path.posix.basename(dir);
-
-            const parentBarrelPosix = path.posix.join(
-                parent,
-                `${folderName}.d.ts`,
-            );
-            const parentBarrelFs = fsPathFromPosixRelative(
-                DIST_DIR,
-                parentBarrelPosix,
-            );
-
-            await fs.mkdir(path.dirname(parentBarrelFs), { recursive: true });
-            await fs.writeFile(
-                parentBarrelFs,
-                generateParentBarrelDts(folderName),
-                "utf8",
-            );
-
-            console.log(`📦 Generated barrel: ${parentBarrelPosix}`);
-        }
+    // Version barrels (`v0/index.ts`), flattened into `v0.d.ts`
+    const versionBarrels = await glob("v[0-9]*/index.d.ts", {
+        cwd: DTS_CACHE_TYPES_DIR,
+        absolute: true,
+    });
+    invariant(
+        versionBarrels.length > 0,
+        "No version barrel (v<N>/index.ts) found.",
+    );
+    for (const barrel of versionBarrels.sort((a, b) => a.localeCompare(b))) {
+        console.log(`Generated barrel: ${await writeVersionBarrel(barrel)}`);
     }
 
-    // Deduplicate and sort character versions
+    // Top-level modules of src (everything but the entry point), e.g. utils.ts
+    const topLevelModules = await glob("*.d.ts", {
+        cwd: DTS_CACHE_DIR,
+        ignore: ["index.d.ts"],
+        absolute: true,
+    });
+    for (const file of topLevelModules.sort((a, b) => a.localeCompare(b))) {
+        console.log(`Generated: ${await copyPluginDeclarationFile(file)}`);
+    }
+
+    // Entry point
     const uniqueCharacterVersions = new Map<number, string>();
     for (const v of characterVersions) {
         uniqueCharacterVersions.set(v.version, v.versionDir);
     }
-
     const normalizedCharacterVersions = [...uniqueCharacterVersions.entries()]
         .map(([version, versionDir]) => ({ version, versionDir }))
         .sort((a, b) => a.version - b.version);
 
-    // Main index.d.ts
-    await fs.mkdir(DIST_DIR, { recursive: true });
-    await fs.writeFile(
+    await writeFileEnsuringDir(
         path.join(DIST_DIR, "index.d.ts"),
         generateMainIndexDts(normalizedCharacterVersions),
-        "utf8",
     );
-    console.log("📦 Generated: index.d.ts");
-
-    // Version barrel files (v0.d.ts, v1.d.ts, ...)
-    const versionDirs = sortedDirs
-        .filter((d) => /^v\d+$/.test(d))
-        .sort((a, b) => a.localeCompare(b));
-
-    for (const vDir of versionDirs) {
-        const vBarrelFs = path.join(DIST_DIR, `${vDir}.d.ts`);
-        await fs.writeFile(
-            vBarrelFs,
-            `// Auto-generated barrel export. DO NOT EDIT.\nexport * from "./${vDir}/index";\n`,
-            "utf8",
-        );
-        console.log(`📦 Generated: ${vDir}.d.ts`);
-    }
+    console.log("Generated: index.d.ts");
 
     // Summary
     console.log(`\n${"=".repeat(50)}`);
-    console.log("🎉 Type generation complete!");
-    console.log(`   ✅ Generated: ${generatedModules.length} module(s)`);
+    console.log("Type generation complete!");
+    console.log(`   Generated: ${generatedModules.length} module(s)`);
     console.log("=".repeat(50));
 }
 
@@ -1244,16 +1629,10 @@ async function main(): Promise<void> {
 try {
     await main();
 } catch (error) {
-    console.error("\n❌ Type generation failed!\n");
+    console.error("\nType generation failed!\n");
 
     if (error instanceof TypeGenerationError) {
         console.error(`File: ${error.filePath}`);
-        console.error(`Error: ${error.message}`);
-        if (error.cause instanceof Error) {
-            console.error(`Cause: ${error.cause.message}`);
-        }
-    } else if (error instanceof SchemaExtractionError) {
-        console.error(`Schema: ${error.schemaName}`);
         console.error(`Error: ${error.message}`);
         if (error.cause instanceof Error) {
             console.error(`Cause: ${error.cause.message}`);
