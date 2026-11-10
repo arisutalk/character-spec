@@ -1,6 +1,7 @@
-import { z } from "zod";
+import * as z from "zod";
+
 import { ReplaceHookSchema } from "@/types/v0/Executables/ReplaceHook";
-import { positiveInteger } from "@/types/v0/utils";
+import { positiveIntegerSchema } from "@/types/v0/utils";
 
 /**
  * This is the script for character. It includes hook, script settings, something else.
@@ -9,11 +10,11 @@ export const ScriptSettingSchema = z
     .object({
         runtimeSetting: z
             .object({
-                mem: positiveInteger.optional().meta({
+                mem: positiveIntegerSchema.optional().meta({
                     description:
                         "The maximum memory usage of the script, in MB. Not an exact limit. May be exceeded or ignored.",
                 }),
-                timeout: positiveInteger.default(3).meta({
+                timeout: positiveIntegerSchema.default(3).meta({
                     description:
                         "The maximum execution time of the script, in seconds. Not an exact limit. May be exceeded or ignored. " +
                         "It is used per call, not a total limit. Default is 3 seconds.",

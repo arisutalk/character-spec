@@ -1,0 +1,19 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "node_modules/.cache/tsconfig.dist.tsbuildinfo",
+        "composite": true
+    },
+    "include": [
+        "tests/type-details.test.ts",
+        "scripts/type-test.ts",
+        "scripts/type-test-utils.ts",
+        "src/**/*.ts",
+        "dist/**/*.d.ts"
+    ],
+    "references": [
+        {
+            "path": "./tsconfig.node.json"
+        }
+    ]
+}

@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { FileSchema, ImageURLSchema, positiveInteger } from "@/types/v0";
-import { CharacterSchema } from "@/types/v0/Character";
-import { AssetsSettingSchema } from "@/types/v0/Character/Assets";
+
+import { characterMap } from "@/index";
 import {
+    AssetsSettingSchema,
+    CharacterSchema,
+    ChatSchema,
+    FileSchema,
+    ImageURLSchema,
     LorebookDataSchema,
     LorebookEntrySchema,
-} from "@/types/v0/Character/Lorebook";
-import { MetaSchema } from "@/types/v0/Character/Meta";
-import { ScriptSettingSchema } from "@/types/v0/Executables/Executable";
-import {
+    MetaSchema,
+    positiveIntegerSchema,
+    ReplaceHookEntitySchema,
     ReplaceHookMetaSchema,
     ReplaceHookSchema,
-} from "@/types/v0/Executables/ReplaceHook";
+    RoleSchema,
+    ScriptSettingSchema,
+} from "@/types/v0";
 
 describe("Schema basics", () => {
     it("MetaSchema provides default license when omitted", () => {
@@ -54,7 +59,7 @@ describe("Schema basics", () => {
         expect(parsed.runtimeSetting.timeout).toBe(3);
     });
 
-    it("AssetsSettingSchema enforces unique names and accepts valid assets", () => {
+    it("AssetsSettingSchema enforces unique ids and accepts valid assets", () => {
         const valid = {
             assets: [
                 {
@@ -111,6 +116,38 @@ describe("Schema basics", () => {
         expect(parsed.executables).toBeDefined();
     });
 
+    it("CharacterSchema keeps avatarUrl as is while it trims the asset ids", () => {
+        const avatar = "local://opfs/avatar.png";
+        const parsed = CharacterSchema.parse({
+            specVersion: 0,
+            id: "c1",
+            name: "Test",
+            description: "desc",
+            avatarUrl: avatar,
+            prompt: { description: "p", lorebook: {} },
+            executables: {},
+            metadata: {},
+            assets: {
+                assets: [
+                    {
+                        id: " avatar ",
+                        mimeType: "image/png",
+                        name: "avatar.png",
+                        data: avatar,
+                    },
+                ],
+            },
+        });
+        // avatarUrl refers to the `data` of an asset, never to its id
+        expect(parsed.avatarUrl).toBe(avatar);
+        expect(parsed.assets.assets[0]?.id).toBe("avatar");
+        expect(
+            parsed.assets.assets.some(
+                (asset) => asset.data === parsed.avatarUrl,
+            ),
+        ).toBe(true);
+    });
+
     it("CharacterSchema throws if required top-level fields are missing", () => {
         expect(() => CharacterSchema.parse({})).toThrow();
     });
@@ -129,12 +166,12 @@ describe("Schema basics", () => {
         expect(() => FileSchema.parse(new Uint8Array([1, 2, 3]))).not.toThrow();
     });
 
-    it("positiveInteger accepts 1 and rejects 0", () => {
-        expect(() => positiveInteger.parse(1)).not.toThrow();
-        expect(() => positiveInteger.parse(0)).toThrow();
+    it("positiveIntegerSchema accepts 1 and rejects 0", () => {
+        expect(() => positiveIntegerSchema.parse(1)).not.toThrow();
+        expect(() => positiveIntegerSchema.parse(0)).toThrow();
     });
 
-    it("LorebookDataSchema rejects tokenLimit=0 in config (positiveInteger)", () => {
+    it("LorebookDataSchema rejects tokenLimit=0 in config (positiveIntegerSchema)", () => {
         expect(() =>
             LorebookDataSchema.parse({ config: { tokenLimit: 0 } }),
         ).toThrow();
@@ -146,5 +183,97 @@ describe("Schema basics", () => {
         // Types are loose here so check keys
         expect(parsed).toHaveProperty("caseSensitive");
         expect(parsed).toHaveProperty("priority");
+    });
+});
+
+describe("Chat and roles", () => {
+    it("ChatSchema fills the title and both timestamps when omitted", () => {
+        const parsed = ChatSchema.parse({ id: "chat-1", characterId: "c1" });
+        expect(parsed.title).toBe("Chat");
+        expect(typeof parsed.createdAt).toBe("number");
+        expect(typeof parsed.updatedAt).toBe("number");
+        // the lorebook entries array carries its own default
+        expect(parsed.lorebook).toEqual([]);
+    });
+
+    it("ChatSchema keeps the given values and accepts a chat specific lorebook", () => {
+        const parsed = ChatSchema.parse({
+            id: "chat-1",
+            characterId: "c1",
+            title: "My chat",
+            createdAt: 1,
+            updatedAt: 2,
+            lorebook: [{ id: "1", name: "entry", content: "some" }],
+        });
+        expect(parsed.title).toBe("My chat");
+        expect(parsed.createdAt).toBe(1);
+        expect(parsed.updatedAt).toBe(2);
+        expect(parsed.lorebook?.[0]?.condition).toEqual([]);
+    });
+
+    it("ChatSchema requires its identifiers", () => {
+        expect(() => ChatSchema.parse({ id: "chat-1" })).toThrow();
+        expect(() => ChatSchema.parse({ characterId: "c1" })).toThrow();
+    });
+
+    it("RoleSchema accepts user, assistant and system only", () => {
+        for (const role of ["user", "assistant", "system"]) {
+            expect(RoleSchema.parse(role)).toBe(role);
+        }
+        expect(() => RoleSchema.parse("tool")).toThrow();
+        expect(() => RoleSchema.parse("")).toThrow();
+    });
+});
+
+describe("ReplaceHookEntitySchema", () => {
+    it("fills the meta defaults of a string hook", () => {
+        const parsed = ReplaceHookEntitySchema.parse({
+            input: "foo",
+            meta: { type: "string" },
+            output: "bar",
+        });
+        expect(parsed.meta).toMatchObject({
+            type: "string",
+            caseSensitive: true,
+            isInputPatternScripted: false,
+            isOutputScripted: false,
+            priority: 0,
+        });
+    });
+
+    it("accepts a regex hook with a flag and rejects one without", () => {
+        const regex = {
+            input: "a+",
+            meta: { type: "regex", flag: "gi" },
+            output: "b",
+        };
+        expect(ReplaceHookEntitySchema.parse(regex).meta).toMatchObject({
+            type: "regex",
+            flag: "gi",
+        });
+        expect(() =>
+            ReplaceHookEntitySchema.parse({
+                ...regex,
+                meta: { type: "regex" },
+            }),
+        ).toThrow();
+    });
+
+    it("requires input, meta and output", () => {
+        expect(() =>
+            ReplaceHookEntitySchema.parse({
+                meta: { type: "string" },
+                output: "",
+            }),
+        ).toThrow();
+        expect(() =>
+            ReplaceHookEntitySchema.parse({ input: "", output: "" }),
+        ).toThrow();
+    });
+});
+
+describe("Spec version map", () => {
+    it("characterMap resolves version 0 to the character schema", () => {
+        expect(characterMap[0]).toBe(CharacterSchema);
     });
 });

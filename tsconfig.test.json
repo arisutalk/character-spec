@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
+        "composite": true
+    },
+    "include": ["tests/**/*.ts", "src/**/*.ts"],
+    "exclude": ["tests/type-details.test.ts"],
+    "references": [
+        {
+            "path": "./tsconfig.node.json"
+        }
+    ]
+}

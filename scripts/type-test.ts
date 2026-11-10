@@ -1,209 +1,126 @@
 /**
- * Type compatibility test: Verify generated types are compatible with z.infer<> types
- * This file should compile without errors if types are compatible.
+ * Type compatibility test: the generated declarations (`dist`) must agree with
+ * the types inferred from the schemas in `src`.
  *
- * Uses `satisfies` operator to verify type compatibility at compile time.
- * If a type doesn't satisfy the constraint, TypeScript will show a compile error.
- *
- * Run: pnpm tsc -p tsconfig.typetest.json
+ * This file is only type-checked, never executed. It compiles if, and only if,
+ * every generated type is identical to the matching `z.infer<>` type.
+ * Build first (`pnpm build`), then run `pnpm test:types`.
  */
 
 import type * as z from "zod";
-// Import generated types from dist
-import type { AssetEntity, AssetsSetting } from "../dist/v0/Character/Assets";
-import type {
-    Character,
-    CharacterPromptData,
-} from "../dist/v0/Character/Character";
-import type { Chat } from "../dist/v0/Character/Chat";
-import type {
-    LorebookCondition,
-    LorebookData,
-    LorebookEntry,
-} from "../dist/v0/Character/Lorebook";
-import type { Message, Role } from "../dist/v0/Character/Message";
-import type { Meta } from "../dist/v0/Character/Meta";
-import type { ScriptSetting } from "../dist/v0/Executables/Executable";
-import type {
-    ReplaceHook,
-    ReplaceHookEntity,
-    ReplaceHookMeta,
-} from "../dist/v0/Executables/ReplaceHook";
-import type { FileType, ImageURL, Uint8ArrayType } from "../dist/v0/utils";
-// Import Zod schemas from source
-import {
-    AssetEntitySchema,
-    AssetsSettingSchema,
-} from "../src/types/v0/Character/Assets";
-import {
-    CharacterPromptDataSchema,
-    CharacterSchema,
-} from "../src/types/v0/Character/Character";
-import { ChatSchema } from "../src/types/v0/Character/Chat";
-import {
-    LorebookConditionSchema,
-    LorebookDataSchema,
-    LorebookEntrySchema,
-} from "../src/types/v0/Character/Lorebook";
-import { MessageSchema, RoleSchema } from "../src/types/v0/Character/Message";
-import { MetaSchema } from "../src/types/v0/Character/Meta";
-import { ScriptSettingSchema } from "../src/types/v0/Executables/Executable";
-import {
-    ReplaceHookEntitySchema,
-    ReplaceHookMetaSchema,
-    ReplaceHookSchema,
-} from "../src/types/v0/Executables/ReplaceHook";
-import {
-    FileSchema,
-    ImageURLSchema,
-    Uint8ArraySchema,
-} from "../src/types/v0/utils";
-import type { Equals } from "./type-test-utils";
+
+// What the code is: the schemas
+import * as Src from "@/types/v0";
+
+// What consumers see: the generated declarations of the public entry point
+import type * as Dist from "../dist/v0";
+import type { Equals, Expect } from "./type-test-utils";
 
 type Inferify<T> = T extends z.ZodType ? z.infer<T> : T;
-function it<T>(_?: T): Inferify<T> {
-    //@ts-expect-error
-    return {};
-}
+
 /**
- * Check exact type equality, bidirectional.
- * If you need omnidirectional type equality, use `satisfies`.
- * @param _a Pass value to compare
- * @param _b Pass value to compare
+ * Produces a value of the inferred type of `T`. Type-level only.
+ * Pass a schema to infer its output type, or give a type argument.
+ */
+declare function it<T>(schema?: T): Inferify<T>;
+
+/**
+ * Check exact type equality. Doesn't compile if `A` and `B` are not equal.
+ * Pass a schema to compare its output type.
  * @param __proof Doesn't compile if A and B are not equal. No need to pass this parameter.
  */
-function is<A, B>(
-    _a: A,
-    _b: B,
+declare function is<A, B>(
+    a: A,
+    b: B,
     ...__proof: Equals<Inferify<A>, Inferify<B>> extends true ? [] : [never]
-): true {
-    return true;
-}
+): true;
 
 // =============================================================================
-// Type Compatibility Tests using `satisfies`
+// Generated plain types vs. inferred types
 // =============================================================================
 
-/**
- * Test Character/Assets types
- */
 function testAssetsTypes() {
-    // AssetEntity - bidirectional
-    is(AssetEntitySchema, it<AssetEntity>());
-
-    // AssetsSetting - bidirectional
-    is(AssetsSettingSchema, it<AssetsSetting>());
+    is(Src.AssetEntitySchema, it<Dist.AssetEntity>());
+    is(Src.AssetsSettingSchema, it<Dist.AssetsSetting>());
 }
 
-/**
- * Test Character/Character types
- */
 function testCharacterTypes() {
-    // Character - bidirectional
-    is(CharacterSchema, it<Character>());
-
-    // CharacterPromptData - bidirectional
-    is(CharacterPromptDataSchema, it<CharacterPromptData>());
+    is(Src.CharacterSchema, it<Dist.Character>());
+    is(Src.CharacterPromptDataSchema, it<Dist.CharacterPromptData>());
 }
 
-/**
- * Test Character/Chat types
- */
 function testChatTypes() {
-    // Chat - bidirectional
-    it(ChatSchema) satisfies Chat;
-    is(it<Chat>(), ChatSchema);
+    is(Src.ChatSchema, it<Dist.Chat>());
 }
 
-/**
- * Test Character/Lorebook types
- */
 function testLorebookTypes() {
-    // LorebookCondition - bidirectional (using satisfies due to complex union types)
-    it(LorebookConditionSchema) satisfies LorebookCondition;
-    it<LorebookCondition>() satisfies z.infer<typeof LorebookConditionSchema>;
-
-    // LorebookData - bidirectional
-    is(it(LorebookDataSchema), it<LorebookData>());
-
-    // LorebookEntry - bidirectional (using satisfies due to nested complexity)
-    it(LorebookEntrySchema) satisfies LorebookEntry;
-    it<LorebookEntry>() satisfies z.infer<typeof LorebookEntrySchema>;
+    is(Src.LorebookConditionSchema, it<Dist.LorebookCondition>());
+    is(Src.LorebookEntrySchema, it<Dist.LorebookEntry>());
+    is(Src.LorebookDataSchema, it<Dist.LorebookData>());
 }
 
-/**
- * Test Character/Message types
- */
 function testMessageTypes() {
-    // Message - bidirectional
-    is(MessageSchema, it<Message>());
-
-    // Role - bidirectional
-    is(RoleSchema, it<Role>());
+    is(Src.MessageSchema, it<Dist.Message>());
+    is(Src.RoleSchema, it<Dist.Role>());
 }
 
-/**
- * Test Character/Meta types
- */
 function testMetaTypes() {
-    // Meta - bidirectional
-    it(MetaSchema) satisfies Meta;
-    it<Meta>() satisfies z.infer<typeof MetaSchema>;
+    is(Src.MetaSchema, it<Dist.Meta>());
 }
 
-/**
- * Test Executables types
- */
+function testInstructionTypes() {
+    is(Src.InstructionSchema, it<Dist.Instruction>());
+}
+
 function testExecutablesTypes() {
-    // ScriptSetting - bidirectional
-    it(ScriptSettingSchema) satisfies ScriptSetting;
-    is(it<ScriptSetting>(), ScriptSettingSchema);
-
-    // ReplaceHook - bidirectional
-    it(ReplaceHookSchema) satisfies ReplaceHook;
-    it<ReplaceHook>() satisfies z.infer<typeof ReplaceHookSchema>;
-
-    // ReplaceHookEntity - bidirectional
-    it(ReplaceHookEntitySchema) satisfies ReplaceHookEntity;
-    it<ReplaceHookEntity>() satisfies z.infer<typeof ReplaceHookEntitySchema>;
-
-    // ReplaceHookMeta - bidirectional
-    it(ReplaceHookMetaSchema) satisfies ReplaceHookMeta;
-    it<ReplaceHookMeta>() satisfies z.infer<typeof ReplaceHookMetaSchema>;
+    is(Src.ScriptSettingSchema, it<Dist.ScriptSetting>());
+    is(Src.ReplaceHookSchema, it<Dist.ReplaceHook>());
+    is(Src.ReplaceHookEntitySchema, it<Dist.ReplaceHookEntity>());
+    is(Src.ReplaceHookMetaSchema, it<Dist.ReplaceHookMeta>());
 }
 
-/**
- * Test Utils types
- */
 function testUtilsTypes() {
-    // FileType - bidirectional
-    is(FileSchema, it<FileType>());
-
-    // ImageURL - bidirectional
-    is(ImageURLSchema, it<ImageURL>());
-
-    // Uint8ArrayType - bidirectional
-    is(Uint8ArraySchema, it<Uint8ArrayType>());
+    is(Src.FileSchema, it<Dist.FileType>());
+    is(Src.ImageURLSchema, it<Dist.ImageURL>());
+    is(Src.Uint8ArraySchema, it<Dist.Uint8ArrayType>());
 }
 
+// Keep the tests above "used"
+export const typeTests = [
+    testAssetsTypes,
+    testCharacterTypes,
+    testChatTypes,
+    testLorebookTypes,
+    testMessageTypes,
+    testMetaTypes,
+    testInstructionTypes,
+    testExecutablesTypes,
+    testUtilsTypes,
+];
+
 // =============================================================================
-// Run all tests
+// Generated schema declarations vs. the schemas
 // =============================================================================
 
-function runAllTests() {
-    testAssetsTypes();
-    testCharacterTypes();
-    testChatTypes();
-    testLorebookTypes();
-    testMessageTypes();
-    testMetaTypes();
-    testExecutablesTypes();
-    testUtilsTypes();
-}
+/** Names of every schema of the public entry point. */
+type SchemaName = Extract<keyof typeof Src, `${string}Schema`>;
 
-runAllTests();
+/** The output type of every schema, by name. */
+type InferredSchemas<Module extends Record<SchemaName, z.ZodType>> = {
+    [K in SchemaName]: z.infer<Module[K]>;
+};
 
-console.log("✅ Type compatibility tests passed!");
-console.log(
-    "   All z.infer<Schema> types are compatible with generated types.",
-);
+/** The runtime and the declarations expose the same names. */
+export type SameExports = Expect<Equals<keyof typeof Src, keyof typeof Dist>>;
+
+/** Every generated schema declaration infers to the same type as its source. */
+export type SameSchemas = Expect<
+    Equals<InferredSchemas<typeof Dist>, InferredSchemas<typeof Src>>
+>;
+
+// =============================================================================
+// Schemas stay transparent (not an opaque `ZodType<T>`)
+// =============================================================================
+
+/** `.shape` only exists on `ZodObject`, so this fails if the schema is opaque. */
+export type CharacterShape = typeof Dist.CharacterSchema.shape;

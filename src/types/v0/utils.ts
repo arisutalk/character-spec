@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * This type is used to represent the URL of an image.
@@ -23,8 +23,7 @@ export const Uint8ArraySchema = z
     .refine(
         (v): v is Uint8Array<ArrayBuffer> => v.buffer instanceof ArrayBuffer,
         {
-            message:
-                "Uint8Array must be backed by an ArrayBuffer, not SharedArrayBuffer",
+            error: "Uint8Array must be backed by an ArrayBuffer, not SharedArrayBuffer",
         },
     )
     .meta({
@@ -44,8 +43,7 @@ export const FileSchema = z
     ])
     .meta({
         description:
-            "Represents a file, either as a URL or as binary data (Uint8Array).\n" +
-            "@type {string | Uint8Array}\n",
+            "Represents a file, either as a URL or as binary data (Uint8Array).",
     });
 /**
  * Custom validator to ensure all objects in the array have unique values for a specific key.
@@ -53,7 +51,7 @@ export const FileSchema = z
  * @returns A predicate function for `z.refine`.
  * @example
  * ```ts
- * const schema = z.array(z.object({ name: z.string() })).refine(unique("name"), { message: "Not unique" });
+ * const schema = z.array(z.object({ name: z.string() })).refine(unique("name"), { error: "Not unique" });
  * ```
  */
 export function unique<
@@ -67,9 +65,26 @@ export function unique<
 }
 
 /**
+ * Creates an array schema of objects whose `id` must be unique.
+ * Missing arrays are filled with an empty array.
+ * @param item The schema of each array item. Its output must have an `id` key.
+ * @returns An array schema which rejects duplicated `id`, and defaults to `[]`.
+ * @example
+ * ```ts
+ * const schema = uniqueIdArray(z.object({ id: z.string() }));
+ * ```
+ */
+export function uniqueIdArray<T extends z.ZodType<{ id: unknown }>>(item: T) {
+    return z
+        .array(item)
+        .refine(unique<z.output<T>>("id"), { error: "Not unique key: id" })
+        .default([]);
+}
+
+/**
  * Zod custom schema to ensure the value is a positive integer.
  */
-export const positiveInteger = z
+export const positiveIntegerSchema = z
     .int()
     .min(1)
     .meta({ description: "Positive integer (>= 1)" });

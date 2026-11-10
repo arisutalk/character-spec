@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "node_modules/.cache/tsconfig.node.tsbuildinfo",
+        "composite": true
+    },
+    "include": ["*.ts", "*.js", "scripts/**/*.ts", "scripts/**/*.js", "*.json"],
+    "exclude": ["scripts/type-test.ts", "scripts/type-test-utils.ts"]
+}

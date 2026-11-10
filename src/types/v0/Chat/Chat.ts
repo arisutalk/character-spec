@@ -1,4 +1,5 @@
-import { z } from "zod";
+import * as z from "zod";
+
 import { LorebookDataSchema } from "@/types/v0/Character/Lorebook";
 
 /**

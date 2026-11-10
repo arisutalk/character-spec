@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { Uint8ArraySchema } from "../src/types/v0/utils";
 
 describe("Uint8ArraySchema", () => {
