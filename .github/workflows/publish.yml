@@ -22,12 +22,12 @@ jobs:
                   package_json_file: "package.json"
                   run_install: false
 
-            # Node 24 bundles npm 11.5.1 or later, which OIDC trusted publishing requires.
+            # Node 26 bundles npm 11.5.1 or later, which OIDC trusted publishing requires.
             # Installing npm@latest instead would pull in an untested major version.
             - name: Setup Node.js (Trusted Publishing OIDC)
               uses: actions/setup-node@v7
               with:
-                  node-version: 24
+                  node-version: 26
                   registry-url: "https://registry.npmjs.org"
                   # No dependency cache: a poisoned cache could read the OIDC token.
                   package-manager-cache: false
